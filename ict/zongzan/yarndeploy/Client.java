@@ -32,11 +32,9 @@ import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
-import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment;
 import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.KillApplicationRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
@@ -140,12 +138,8 @@ public class Client {
     // Command line options
     private Options opts;
 
-    private static final String shellCommandPath = "shellCommands";
-    private static final String shellArgsPath = "shellArgs";
     //hadoop会将你运行的jar包解压，按照一定的目录重新打包成包名如下的jar包
     private static final String appMasterJarPath = "AppMaster.jar";
-    // Hardcoded path to custom log_properties
-    private static final String log4jPath = "log4j.properties";
 
     public static final String SCRIPT_PATH = "ExecScript.sh";
 
@@ -494,16 +488,6 @@ public class Client {
         taskJarLen = taskFileStatus.getLen();
         taskJarTimestamp = taskFileStatus.getModificationTime();
 
-        if (!shellCommand.isEmpty()) {
-            System.out.println("-----ShellCommand" + shellCommand);
-            addToLocalResources(fs, null, shellCommandPath, appId.toString(),
-                    localResources, shellCommand);
-        }
-
-        if (shellArgs.length > 0) {
-            addToLocalResources(fs, null, shellArgsPath, appId.toString(),
-                    localResources, StringUtils.join(shellArgs, " "));
-        }
 
         // Set the necessary security tokens as needed
         //amContainer.setContainerTokens(containerToken);
@@ -542,7 +526,7 @@ public class Client {
             classPathEnv.append(':');
             classPathEnv.append(System.getProperty("java.class.path"));
         }
-        
+
         env.put("CLASSPATH", classPathEnv.toString());
 
         // 设置运行参数

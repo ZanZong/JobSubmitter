@@ -199,8 +199,8 @@ public class ApplicationMaster {
   // Hardcoded path to custom log_properties
   private static final String log4jPath = "log4j.properties";
 
-  private static final String shellCommandPath = "shellCommands";
-  private static final String shellArgsPath = "shellArgs";
+ /* private static final String shellCommandPath = "shellCommands";
+  private static final String shellArgsPath = "shellArgs";*/
 
   private volatile boolean done;
 
@@ -335,20 +335,6 @@ public class ApplicationMaster {
         + appAttemptID.getApplicationId().getId() + ", clustertimestamp="
         + appAttemptID.getApplicationId().getClusterTimestamp()
         + ", attemptId=" + appAttemptID.getAttemptId());
-
-    if (!fileExist(shellCommandPath)
-        && envs.get(org.apache.hadoop.yarn.applications.distributedshell.DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION).isEmpty()) {
-      throw new IllegalArgumentException(
-          "No shell command or shell script specified to be executed by application master");
-    }
-
-    if (fileExist(shellCommandPath)) {
-      shellCommand = readContent(shellCommandPath);
-    }
-
-    if (fileExist(shellArgsPath)) {
-      shellArgs = readContent(shellArgsPath);
-    }
 
     if (cliParser.hasOption("shell_env")) {
       String shellEnvs[] = cliParser.getOptionValues("shell_env");
