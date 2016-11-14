@@ -11,12 +11,12 @@ public class Task {
     // 所属的jobId
     private long jobId;
     // task请求的资源
-    private Resource resourceRequest = null;
+    private Resource resourceRequests = null;
     // 执行的jar包
     private String jarPath = "";
 
     public Task(Resource resourceRequest, String jarPath) {
-        this.resourceRequest = resourceRequest;
+        this.resourceRequests = resourceRequest;
         this.jarPath = jarPath;
         timestamp = System.currentTimeMillis();
     }

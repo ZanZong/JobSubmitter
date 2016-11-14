@@ -51,4 +51,9 @@ public class DSConstants {
    * Environment key name denoting the timeline domain ID.
    */
   public static final String DISTRIBUTEDSHELLTIMELINEDOMAIN = "DISTRIBUTEDSHELLTIMELINEDOMAIN";
+
+  public static final String TASKJARLOC = "TASKJARLOC";
+  public static final String TASKJARLEN = "TASKJARLEN";
+  public static final String TASKJARTIMESTAMP = "TASKJARTIMESTAMP";
+
 }

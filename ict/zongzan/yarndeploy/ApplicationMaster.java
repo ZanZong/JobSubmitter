@@ -20,12 +20,10 @@ package ict.zongzan.yarndeploy;
 /**
  * Created by Zongzan on 2016/11/4.
  */
-import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.StringReader;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -52,29 +50,21 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataOutputBuffer;
-import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.ExitUtil;
-import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment;
 /**
  *下面两个协议是AM和RM和NM通信的，现在统一组合到ApplicationMaster类中
  */
-import org.apache.hadoop.yarn.api.ApplicationMasterProtocol;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 
-import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.FinishApplicationMasterRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.StartContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
@@ -89,12 +79,10 @@ import org.apache.hadoop.yarn.api.records.LocalResourceVisibility;
 import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
-import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.URL;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEvent;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
-import org.apache.hadoop.yarn.applications.distributedshell.DSConstants;
 import org.apache.hadoop.yarn.applications.distributedshell.Log4jPropertyHelper;
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest;
 import org.apache.hadoop.yarn.client.api.TimelineClient;
@@ -109,67 +97,7 @@ import org.apache.log4j.LogManager;
 
 import com.google.common.annotations.VisibleForTesting;
 
-/**
- * An ApplicationMaster for executing shell commands on a set of launched
- * containers using the YARN framework.
- * 
- * <p>
- * This class is meant to act as an example on how to write yarn-based
- * application masters.
- * </p>
- * 
- * <p>
- * The ApplicationMaster is started on a container by the
- * <code>ResourceManager</code>'s launcher. The first thing that the
- * <code>ApplicationMaster</code> needs to do is to connect and register itself
- * with the <code>ResourceManager</code>. The registration sets up information
- * within the <code>ResourceManager</code> regarding what host:port the
- * ApplicationMaster is listening on to provide any form of functionality to a
- * client as well as a tracking url that a client can use to keep track of
- * status/job history if needed. However, in the distributedshell, trackingurl
- * and appMasterHost:appMasterRpcPort are not supported.
- * </p>
- * 
- * <p>
- * The <code>ApplicationMaster</code> needs to send a heartbeat to the
- * <code>ResourceManager</code> at regular intervals to inform the
- * <code>ResourceManager</code> that it is up and alive. The
- * {@link ApplicationMasterProtocol#allocate} to the <code>ResourceManager</code> from the
- * <code>ApplicationMaster</code> acts as a heartbeat.
- * 
- * <p>
- * For the actual handling of the job, the <code>ApplicationMaster</code> has to
- * request the <code>ResourceManager</code> via {@link AllocateRequest} for the
- * required no. of containers using {@link ResourceRequest} with the necessary
- * resource specifications such as node location, computational
- * (memory/disk/cpu) resource requirements. The <code>ResourceManager</code>
- * responds with an {@link AllocateResponse} that informs the
- * <code>ApplicationMaster</code> of the set of newly allocated containers,
- * completed containers as well as current state of available resources.
- * </p>
- * 
- * <p>
- * For each allocated container, the <code>ApplicationMaster</code> can then set
- * up the necessary launch context via {@link ContainerLaunchContext} to specify
- * the allocated container id, local resources required by the executable, the
- * environment to be setup for the executable, commands to execute, etc. and
- * submit a {@link StartContainerRequest} to the {@link ContainerManagementProtocol} to
- * launch and execute the defined commands on the given allocated container.
- * </p>
- * 
- * <p>
- * The <code>ApplicationMaster</code> can monitor the launched container by
- * either querying the <code>ResourceManager</code> using
- * {@link ApplicationMasterProtocol#allocate} to get updates on completed containers or via
- * the {@link ContainerManagementProtocol} by querying for the status of the allocated
- * container's {@link ContainerId}.
- *
- * <p>
- * After the job has been completed, the <code>ApplicationMaster</code> has to
- * send a {@link FinishApplicationMasterRequest} to the
- * <code>ResourceManager</code> to inform it that the
- * <code>ApplicationMaster</code> has been completed.
- */
+
 @InterfaceAudience.Public
 @InterfaceStability.Unstable
 public class ApplicationMaster {
@@ -257,13 +185,16 @@ public class ApplicationMaster {
   // File length needed for local resource
   private long shellScriptPathLen = 0;
 
+  //taskjar
+  private String taskJarPath = "";
+  private long taskJarTimestamp = 0;
+  private long taskJarLen = 0;
+
   // Timeline domain ID
   private String domainId = null;
 
   // Hardcoded path to shell script in launch container's local env
-  private static final String ExecShellStringPath = org.apache.hadoop.yarn.applications.distributedshell.Client.SCRIPT_PATH + ".sh";
-  private static final String ExecBatScripStringtPath = org.apache.hadoop.yarn.applications.distributedshell.Client.SCRIPT_PATH
-      + ".bat";
+  private static final String ExecShellStringPath = Client.SCRIPT_PATH;
 
   // Hardcoded path to custom log_properties
   private static final String log4jPath = "log4j.properties";
@@ -437,16 +368,16 @@ public class ApplicationMaster {
       }
     }
 
-    if (envs.containsKey(org.apache.hadoop.yarn.applications.distributedshell.DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION)) {
-      scriptPath = envs.get(org.apache.hadoop.yarn.applications.distributedshell.DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION);
+    if (envs.containsKey(DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION)) {
+      scriptPath = envs.get(DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION);
 
-      if (envs.containsKey(org.apache.hadoop.yarn.applications.distributedshell.DSConstants.DISTRIBUTEDSHELLSCRIPTTIMESTAMP)) {
+      if (envs.containsKey(DSConstants.DISTRIBUTEDSHELLSCRIPTTIMESTAMP)) {
         shellScriptPathTimestamp = Long.parseLong(envs
-            .get(org.apache.hadoop.yarn.applications.distributedshell.DSConstants.DISTRIBUTEDSHELLSCRIPTTIMESTAMP));
+            .get(DSConstants.DISTRIBUTEDSHELLSCRIPTTIMESTAMP));
       }
-      if (envs.containsKey(org.apache.hadoop.yarn.applications.distributedshell.DSConstants.DISTRIBUTEDSHELLSCRIPTLEN)) {
+      if (envs.containsKey(DSConstants.DISTRIBUTEDSHELLSCRIPTLEN)) {
         shellScriptPathLen = Long.parseLong(envs
-            .get(org.apache.hadoop.yarn.applications.distributedshell.DSConstants.DISTRIBUTEDSHELLSCRIPTLEN));
+            .get(DSConstants.DISTRIBUTEDSHELLSCRIPTLEN));
       }
       if (!scriptPath.isEmpty()
           && (shellScriptPathTimestamp <= 0 || shellScriptPathLen <= 0)) {
@@ -458,7 +389,20 @@ public class ApplicationMaster {
       }
     }
 
-    if (envs.containsKey(org.apache.hadoop.yarn.applications.distributedshell.DSConstants.DISTRIBUTEDSHELLTIMELINEDOMAIN)) {
+    //设置taskjar的env
+    taskJarPath = envs.get(DSConstants.TASKJARLOC);
+    taskJarLen = Long.parseLong(envs.get(DSConstants.TASKJARLEN));
+    taskJarTimestamp = Long.parseLong(envs.get(DSConstants.TASKJARTIMESTAMP));
+    if (!scriptPath.isEmpty()
+            && (shellScriptPathTimestamp <= 0 || shellScriptPathLen <= 0)) {
+      LOG.error("Illegal values in env for task jar path" + ", path="
+              + taskJarPath + ", len=" + taskJarLen + ", timestamp="
+              + taskJarTimestamp);
+      throw new IllegalArgumentException(
+              "Illegal values in env for task jar path");
+    }
+
+    if (envs.containsKey(DSConstants.DISTRIBUTEDSHELLTIMELINEDOMAIN)) {
       domainId = envs.get(DSConstants.DISTRIBUTEDSHELLTIMELINEDOMAIN);
     }
 
@@ -630,7 +574,7 @@ public class ApplicationMaster {
     while (!done
         && (numCompletedContainers.get() != numTotalContainers)) {
       try {
-        Thread.sleep(200);
+        Thread.sleep(500);
       } catch (InterruptedException ex) {}
     }
 
@@ -649,7 +593,7 @@ public class ApplicationMaster {
     //这里是等待10s
     for (Thread launchThread : launchThreads) {
       try {
-        launchThread.join(10000);
+        launchThread.join(20000);
       } catch (InterruptedException e) {
         LOG.info("Exception thrown in thread join: " + e.getMessage());
         e.printStackTrace();
@@ -775,9 +719,9 @@ public class ApplicationMaster {
             + ", containerResourceMemory"
             + allocatedContainer.getResource().getMemory()
             + ", containerResourceVirtualCores"
-            + allocatedContainer.getResource().getVirtualCores());
-        // + ", containerToken"
-        // +allocatedContainer.getContainerToken().getIdentifier().toString());
+            + allocatedContainer.getResource().getVirtualCores()
+            + ", containerToken"
+            + allocatedContainer.getContainerToken().getIdentifier().toString());
 
         //启动Container线程
         LaunchContainerRunnable runnableLaunchContainer =
@@ -912,7 +856,7 @@ public class ApplicationMaster {
     @Override
     /**
      * Connects to CM, sets up container launch context 
-     * for shell command and eventually dispatches the container 
+     * for shell command and eventually dispatches the container
      * start request to the CM. 
      */
     public void run() {
@@ -926,50 +870,49 @@ public class ApplicationMaster {
       // resources too.
       // In this scenario, if a shell script is specified, we need to have it
       // copied and made available to the container.
-      if (!scriptPath.isEmpty()) {
-        Path renamedScriptPath = null;
-        if (Shell.WINDOWS) {
-          renamedScriptPath = new Path(scriptPath + ".bat");
-        } else {
-          renamedScriptPath = new Path(scriptPath + ".sh");
-        }
 
-        try {
-          // rename the script file based on the underlying OS syntax.
-          renameScriptFile(renamedScriptPath);
-        } catch (Exception e) {
-          LOG.error(
-              "Not able to add suffix (.bat/.sh) to the shell script filename",
-              e);
-          // We know we cannot continue launching the container
-          // so we should release it.
-          numCompletedContainers.incrementAndGet();
-          numFailedContainers.incrementAndGet();
-          return;
-        }
+      //scriptPath="ExecScript"
+      Path exeScriptPath = new Path(scriptPath);
+      //设置使用/bin/bash执行脚本
+      shellCommand = linux_bash_command;
 
-        URL yarnUrl = null;
-        try {
-          yarnUrl = ConverterUtils.getYarnUrlFromURI(
-            new URI(renamedScriptPath.toString()));
-        } catch (URISyntaxException e) {
-          LOG.error("Error when trying to use shell script path specified"
-              + " in env, path=" + renamedScriptPath, e);
-          // A failure scenario on bad input such as invalid shell script path
-          // We know we cannot continue launching the container
-          // so we should release it.
-          // TODO
-          numCompletedContainers.incrementAndGet();
-          numFailedContainers.incrementAndGet();
-          return;
-        }
-        LocalResource shellRsrc = LocalResource.newInstance(yarnUrl,
-          LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
-          shellScriptPathLen, shellScriptPathTimestamp);
-        localResources.put(Shell.WINDOWS ? ExecBatScripStringtPath :
-            ExecShellStringPath, shellRsrc);
-        shellCommand = Shell.WINDOWS ? windows_command : linux_bash_command;
+      //将脚本加入到container
+      URL yarnUrl = null;
+      try {
+        yarnUrl = ConverterUtils.getYarnUrlFromURI(
+          new URI(exeScriptPath.toString()));
+      } catch (URISyntaxException e) {
+        LOG.error("Error when trying to use shell script path specified"
+            + " in env, path=" + exeScriptPath, e);
+        // A failure scenario on bad input such as invalid shell script path
+        // We know we cannot continue launching the container
+        // so we should release it.
+        // TODO
+        numCompletedContainers.incrementAndGet();
+        numFailedContainers.incrementAndGet();
+        return;
       }
+      LocalResource shellRsrc = LocalResource.newInstance(yarnUrl,
+      LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
+      shellScriptPathLen, shellScriptPathTimestamp);
+      localResources.put(ExecShellStringPath, shellRsrc);
+
+      //taskjars
+      URL taskUrl = null;
+      try{
+        taskUrl = ConverterUtils.getYarnUrlFromURI(
+                new URI(taskJarPath));
+      } catch (URISyntaxException e){
+        LOG.error("Error when trying to use task jar path specified"
+                + " in env, path=" + taskJarPath, e);
+        numCompletedContainers.incrementAndGet();
+        numFailedContainers.incrementAndGet();
+        return;
+      }
+      LocalResource taskJarRsrc = LocalResource.newInstance(taskUrl,
+              LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
+              taskJarLen, taskJarTimestamp);
+      localResources.put("YarnApp.jar", taskJarRsrc);
 
       // Set the necessary command to execute on the allocated container
       Vector<CharSequence> vargs = new Vector<CharSequence>(5);
@@ -978,10 +921,8 @@ public class ApplicationMaster {
       vargs.add(shellCommand);
       // Set shell script path
       if (!scriptPath.isEmpty()) {
-        vargs.add(Shell.WINDOWS ? ExecBatScripStringtPath
-            : ExecShellStringPath);
+        vargs.add(ExecShellStringPath);
       }
-
       // Set args for the shell command if any
       vargs.add(shellArgs);
       //Container日志路径，包含Container的输出和错误日志，位于/hadoop/userlogs/
@@ -1014,19 +955,19 @@ public class ApplicationMaster {
     }
   }
 
-  private void renameScriptFile(final Path renamedScriptPath)
+/*  private void renameScriptFile(final Path renamedScriptPath)
       throws IOException, InterruptedException {
     appSubmitterUgi.doAs(new PrivilegedExceptionAction<Void>() {
       @Override
       public Void run() throws IOException {
-        FileSystem fs = renamedScriptPath.getFileSystem(conf);
+        FileSystem fs = renamedScriptPath.getFileSystem(conf);//这句抛异常了
         fs.rename(new Path(scriptPath), renamedScriptPath);
         return null;
       }
     });
     LOG.info("User " + appSubmitterUgi.getUserName()
         + " added suffix(.sh/.bat) to script file as " + renamedScriptPath);
-  }
+  }*/
 
   /**
    * Setup the request that will be sent to the RM for the container ask.

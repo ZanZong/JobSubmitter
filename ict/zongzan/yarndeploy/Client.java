@@ -63,37 +63,7 @@ import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.timeline.TimelineUtils;
 
-/**
- * Client for Distributed Shell application submission to YARN.
- *
- * <p> The distributed shell client allows an application master to be launched that in turn would run
- * the provided shell command on a set of containers. </p>
- *
- * <p>This client is meant to act as an example on how to write yarn-based applications. </p>
- *
- * <p> To submit an application, a client first needs to connect to the <code>ResourceManager</code>
- * aka ApplicationsManager or ASM via the {@link ApplicationClientProtocol}. The {@link ApplicationClientProtocol}
- * provides a way for the client to get access to cluster information and to request for a
- * new {@link ApplicationId}. <p>
- *
- * <p> For the actual job submission, the client first has to create an {@link ApplicationSubmissionContext}.
- * The {@link ApplicationSubmissionContext} defines the application details such as {@link ApplicationId}
- * and application name, the priority assigned to the application and the queue
- * to which this application needs to be assigned. In addition to this, the {@link ApplicationSubmissionContext}
- * also defines the {@link ContainerLaunchContext} which describes the <code>Container</code> with which
- * the {@link ApplicationMaster} is launched. </p>
- *
- * <p> The {@link ContainerLaunchContext} in this scenario defines the resources to be allocated for the
- * {@link ApplicationMaster}'s container, the local resources (jars, configuration files) to be made available
- * and the environment to be set for the {@link ApplicationMaster} and the commands to be executed to run the
- * {@link ApplicationMaster}. <p>
- *
- * <p> Using the {@link ApplicationSubmissionContext}, the client submits the application to the
- * <code>ResourceManager</code> and then monitors the application by requesting the <code>ResourceManager</code>
- * for an {@link ApplicationReport} at regular time intervals. In case of the application taking too long, the client
- * kills the application by submitting a {@link KillApplicationRequest} to the <code>ResourceManager</code>. </p>
- *
- */
+
 @InterfaceAudience.Public
 @InterfaceStability.Unstable
 public class Client {
@@ -177,12 +147,14 @@ public class Client {
     // Hardcoded path to custom log_properties
     private static final String log4jPath = "log4j.properties";
 
-    public static final String SCRIPT_PATH = "ExecScript";
+    public static final String SCRIPT_PATH = "ExecScript.sh";
+
+    public static final String TASKJAR_PATH = "YarnApp.jar";
 
 
     public Client(Configuration conf) throws Exception  {
         this(
-                "ict.zongzan.yarnapp.ApplicationMaster",
+                "ict.zongzan.yarndeploy.ApplicationMaster",
                 conf);
     }
 
@@ -327,6 +299,7 @@ public class Client {
         if (cliParser.hasOption("shell_args")) {
             shellArgs = cliParser.getOptionValues("shell_args");
         }
+
         if (cliParser.hasOption("shell_env")) {
             String envs[] = cliParser.getOptionValues("shell_env");
             for (String env : envs) {
@@ -345,7 +318,6 @@ public class Client {
             }
         }
         shellCmdPriority = Integer.parseInt(cliParser.getOptionValue("shell_cmd_priority", "0"));
-
         containerMemory = Integer.parseInt(cliParser.getOptionValue("container_memory", "10"));
         containerVirtualCores = Integer.parseInt(cliParser.getOptionValue("container_vcores", "1"));
         numContainers = Integer.parseInt(cliParser.getOptionValue("num_containers", "1"));
@@ -435,11 +407,6 @@ public class Client {
         //与ResourceManager通信，创建Application
         YarnClientApplication app = yarnClient.createApplication();
         GetNewApplicationResponse appResponse = app.getNewApplicationResponse();
-        // TODO get min/max resource capabilities from RM and change memory ask if needed
-        // If we do not have min/max, we may not be able to correctly request
-        // the required resources from the RM for the app master
-        // Memory ask has to be a multiple of min and less than max.
-        // Dump out information about cluster capability as seen by the resource manager
         int maxMem = appResponse.getMaximumResourceCapability().getMemory();
         LOG.info("Max mem capabililty of resources in this cluster " + maxMem);
 
@@ -480,14 +447,15 @@ public class Client {
                     .setAttemptFailuresValidityInterval(attemptFailuresValidityInterval);
         }
 
-        // set local resources for the application master
-        // local files or archives as needed
-        // In this scenario, the jar file for the application master is part of the local resources
+        // 加载本地资源
+        // 在container的环境中，如果需要运行某些脚本或者jar包
+        // 就需要将他们加载的container中。首先将它们复制到
+        // 分布式文件系统中，container可以从中读取资源并在启动
+        // 时，由LaunchContainerRunnable线程加载。
+
         Map<String, LocalResource> localResources = new HashMap<String, LocalResource>();
 
         LOG.info("Copy App Master jar from local filesystem and add to local environment");
-        // Copy the application master jar to the filesystem
-        // Create a local resource to point to the destination jar path
         //加载本地资源,存到了hdfs里
         System.out.println("------conf:"+conf+"-------------");
         System.out.println("------appMasterJar:"+appMasterJar);
@@ -498,21 +466,6 @@ public class Client {
         FileSystem fs = FileSystem.get(conf);
         addToLocalResources(fs, appMasterJar, appMasterJarPath, appId.toString(),
                 localResources, null);
-
-        // Set the log4j properties if needed
-        System.out.println("------log4jPropFile:"+log4jPropFile+"-------------");
-        System.out.println("------log4jPath:"+log4jPath+"-------------");
-        if (!log4jPropFile.isEmpty()) {
-            addToLocalResources(fs, log4jPropFile, log4jPath, appId.toString(),
-                    localResources, null);
-        }
-
-        // The shell script has to be made available on the final container(s)
-        // where it will be executed.
-        // To do this, we need to first copy into the filesystem that is visible
-        // to the yarn framework.
-        // We do not need to set this as a local resource for the application
-        // master as the application master does not need it.
         String hdfsShellScriptLocation = "";
         long hdfsShellScriptLen = 0;
         long hdfsShellScriptTimestamp = 0;
@@ -529,8 +482,20 @@ public class Client {
             hdfsShellScriptTimestamp = shellFileStatus.getModificationTime();
         }
 
+        String taskJarLoc = "";
+        long taskJarLen = 0;
+        long taskJarTimestamp = 0;
+        Path taskJarSrc = new Path("/home/zongzan/taskjar/YarnApp.jar");
+        String suffix = appName + "/" + appId.toString() + "/" + TASKJAR_PATH;
+        Path taskJarDst = new Path(fs.getHomeDirectory(), suffix);
+        fs.copyFromLocalFile(false, true, taskJarSrc, taskJarDst);
+        taskJarLoc = taskJarDst.toUri().toString();
+        FileStatus taskFileStatus = fs.getFileStatus(taskJarDst);
+        taskJarLen = taskFileStatus.getLen();
+        taskJarTimestamp = taskFileStatus.getModificationTime();
 
         if (!shellCommand.isEmpty()) {
+            System.out.println("-----ShellCommand" + shellCommand);
             addToLocalResources(fs, null, shellCommandPath, appId.toString(),
                     localResources, shellCommand);
         }
@@ -546,23 +511,21 @@ public class Client {
         // 设置AM运行所需的环境变量env
         LOG.info("Set the environment for the application master");
         Map<String, String> env = new HashMap<String, String>();
-
-        // put location of shell script into env
-        // using the env info, the application master will create the correct local resource for the
-        // eventual containers that will be launched to execute the shell scripts
+        System.out.println("----Zongzan:hdfsShellScriptLocation: " + hdfsShellScriptLocation);
+        System.out.println("----Zongzan:taskjarLocation: " + taskJarLoc);
         env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION, hdfsShellScriptLocation);
         env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTTIMESTAMP, Long.toString(hdfsShellScriptTimestamp));
         env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTLEN, Long.toString(hdfsShellScriptLen));
+        //taskjar
+        env.put(DSConstants.TASKJARLOC, taskJarLoc);
+        env.put(DSConstants.TASKJARTIMESTAMP, Long.toString(taskJarTimestamp));
+        env.put(DSConstants.TASKJARLEN, Long.toString(taskJarLen));
+
         if (domainId != null && domainId.length() > 0) {
             env.put(DSConstants.DISTRIBUTEDSHELLTIMELINEDOMAIN, domainId);
         }
 
-        // Add AppMaster.jar location to classpath
-        // At some point we should not be required to add
-        // the hadoop specific classpaths to the env.
-        // It should be provided out of the box.
-        // For now setting all required classpaths including
-        // the classpath to "." for the application jar
+       //设置ClassPath，将ApplicationMaster类加入其中
         StringBuilder classPathEnv = new StringBuilder(Environment.CLASSPATH.$$())
                 .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("./*");
         for (String c : conf.getStrings(
@@ -579,10 +542,10 @@ public class Client {
             classPathEnv.append(':');
             classPathEnv.append(System.getProperty("java.class.path"));
         }
-
+        
         env.put("CLASSPATH", classPathEnv.toString());
 
-        // Set the necessary command to execute the application master
+        // 设置运行参数
         Vector<CharSequence> vargs = new Vector<CharSequence>(30);
 
         // Set java executable command
@@ -607,7 +570,7 @@ public class Client {
         if (debugFlag) {
             vargs.add("--debug");
         }
-
+        //该参数用来重定向错误日志
         vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/AppMaster.stdout");
         vargs.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/AppMaster.stderr");
 
@@ -622,11 +585,11 @@ public class Client {
         commands.add(command.toString());
 
         //将需要执行的jar包加到ContainerCtx中
-        addToLocalResources();
+       /* addToLocalResources(fs, "/home/zongzan/taskjar/YarnApp.jar", "YarnApp.jar",
+                appId.toString(), localResources, null);*/
 
         // 构造用于运行Application的Container
         // Container信息被封装到Context中
-        // Set up the container launch context for the application master
         ContainerLaunchContext amContainer = ContainerLaunchContext.newInstance(
                 localResources, env, commands, null, null, null);
 

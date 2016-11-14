@@ -36,14 +36,19 @@ public class Master {
             }
             //启动client
             result = yarnClient.run();
-            LOG.error("Application failed to complete successfully");
+            LOG.info("result:" + result);
+            if(result)
+                LOG.info("Application complete successfully!");
+            else
+                LOG.error("Application failed!");
             System.exit(2);
-
         }catch (Exception e){
             e.printStackTrace();
             LOG.fatal("Error running Client", e);
+            LOG.error("Application failed!");
             System.exit(1);
         }
+
 
     }
 
