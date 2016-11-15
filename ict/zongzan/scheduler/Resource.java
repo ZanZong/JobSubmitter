@@ -5,29 +5,32 @@ package ict.zongzan.scheduler;
  */
 public class Resource {
     // 使用cpu核数
-    private int cpuCoresNum = 1;
+    private int cores = 1;
     // 使用内存大小
-    private int RAM = 100;
+    private int RAM = 350;
     // 磁盘大小
     private int localDiskSpace = 0;
+    // core seconds per second
+    private double scps = 0.0;
 
-    public Resource(int cpuCoresNum, int RAM, int localDiskSpace) {
-        this.cpuCoresNum = cpuCoresNum;
+    public Resource(int cores, int RAM, int localDiskSpace, double scps) {
+        this.cores = cores;
         this.RAM = RAM;
         this.localDiskSpace = localDiskSpace;
+        this.scps = scps;
     }
 
-    public Resource(int cpuCoresNum, int RAM){
-        this.cpuCoresNum = cpuCoresNum;
+    public Resource(int cores, int RAM) {
+        this.cores = cores;
         this.RAM = RAM;
     }
 
-    public int getCpuCoresNum() {
-        return cpuCoresNum;
+    public int getCores() {
+        return cores;
     }
 
-    public void setCpuCoresNum(int cpuCoresNum) {
-        this.cpuCoresNum = cpuCoresNum;
+    public void setCores(int cores) {
+        this.cores = cores;
     }
 
     public int getRAM() {
@@ -45,4 +48,23 @@ public class Resource {
     public void setLocalDiskSpace(int localDiskSpace) {
         this.localDiskSpace = localDiskSpace;
     }
+
+    public double getScps() {
+        return scps;
+    }
+
+    public void setScps(double scps) {
+        this.scps = scps;
+    }
+
+    @Override
+    public String toString() {
+        return "Resource{" +
+                "cores=" + cores +
+                ", RAM=" + RAM +
+                ", localDiskSpace=" + localDiskSpace +
+                ", scps=" + scps +
+                '}';
+    }
 }
+

@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
+import ict.zongzan.scheduler.Job;
+import ict.zongzan.scheduler.Task;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -17,7 +19,6 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -138,13 +139,15 @@ public class Client {
     // Command line options
     private Options opts;
 
+    //提交job
+    private Job job = null;
+
     //hadoop会将你运行的jar包解压，按照一定的目录重新打包成包名如下的jar包
     private static final String appMasterJarPath = "AppMaster.jar";
 
     public static final String SCRIPT_PATH = "ExecScript.sh";
 
     public static final String TASKJAR_PATH = "YarnApp.jar";
-
 
     public Client(Configuration conf) throws Exception  {
         this(
@@ -258,7 +261,7 @@ public class Client {
             keepContainers = true;
         }
 
-        appName = cliParser.getOptionValue("appname", "DistributedShell");
+        appName = cliParser.getOptionValue("appname", "JobSubmitter");
         amPriority = Integer.parseInt(cliParser.getOptionValue("priority", "0"));
         amQueue = cliParser.getOptionValue("queue", "default");
         amMemory = Integer.parseInt(cliParser.getOptionValue("master_memory", "10"));
@@ -460,7 +463,8 @@ public class Client {
         FileSystem fs = FileSystem.get(conf);
         addToLocalResources(fs, appMasterJar, appMasterJarPath, appId.toString(),
                 localResources, null);
-        String hdfsShellScriptLocation = "";
+        //改为不上传脚本，传jar包，使用命令直接运行
+       /* String hdfsShellScriptLocation = "";
         long hdfsShellScriptLen = 0;
         long hdfsShellScriptTimestamp = 0;
         if (!shellScriptPath.isEmpty()) {
@@ -474,9 +478,9 @@ public class Client {
             FileStatus shellFileStatus = fs.getFileStatus(shellDst);
             hdfsShellScriptLen = shellFileStatus.getLen();
             hdfsShellScriptTimestamp = shellFileStatus.getModificationTime();
-        }
+        }*/
 
-        String taskJarLoc = "";
+        /*String taskJarLoc = "";
         long taskJarLen = 0;
         long taskJarTimestamp = 0;
         Path taskJarSrc = new Path("/home/zongzan/taskjar/YarnApp.jar");
@@ -486,7 +490,12 @@ public class Client {
         taskJarLoc = taskJarDst.toUri().toString();
         FileStatus taskFileStatus = fs.getFileStatus(taskJarDst);
         taskJarLen = taskFileStatus.getLen();
-        taskJarTimestamp = taskFileStatus.getModificationTime();
+        taskJarTimestamp = taskFileStatus.getModificationTime();*/
+
+        // jar包添加到container
+        for(Task task : job.getTasks()){
+            addRescToContainer(fs, task, appId.toString());
+        }
 
 
         // Set the necessary security tokens as needed
@@ -495,11 +504,11 @@ public class Client {
         // 设置AM运行所需的环境变量env
         LOG.info("Set the environment for the application master");
         Map<String, String> env = new HashMap<String, String>();
-        System.out.println("----Zongzan:hdfsShellScriptLocation: " + hdfsShellScriptLocation);
+        /*System.out.println("----Zongzan:hdfsShellScriptLocation: " + hdfsShellScriptLocation);
         System.out.println("----Zongzan:taskjarLocation: " + taskJarLoc);
         env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION, hdfsShellScriptLocation);
         env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTTIMESTAMP, Long.toString(hdfsShellScriptTimestamp));
-        env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTLEN, Long.toString(hdfsShellScriptLen));
+        env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTLEN, Long.toString(hdfsShellScriptLen));*/
         //taskjar
         env.put(DSConstants.TASKJARLOC, taskJarLoc);
         env.put(DSConstants.TASKJARTIMESTAMP, Long.toString(taskJarTimestamp));
@@ -782,5 +791,40 @@ public class Client {
         } finally {
             timelineClient.stop();
         }
+    }
+
+    public void setJob(Job job){
+        if(job != null){
+            this.job = job;
+        }
+        else{
+            LOG.error("Error, Job is null.");
+        }
+    }
+
+    private void addRescToContainer(FileSystem fs, Task task, String appId){
+        String srcp = task.getJarPath();
+        String[] tmp = srcp.split("//");
+        if(tmp.length > 0){
+            Path taskJarSrc = new Path(task.getJarPath());
+            String suffix = appName + "/" + appId + "/" + tmp[tmp.length - 1];//解析
+            Path taskJarDst = new Path(fs.getHomeDirectory(), suffix);
+            try {
+                fs.copyFromLocalFile(false, true, taskJarSrc, taskJarDst);
+                task.setTaskJarLocation(taskJarDst.toUri().toString());
+                FileStatus taskFileStatus = fs.getFileStatus(taskJarDst);
+                task.setTaskJarLen(taskFileStatus.getLen());
+                task.setTaskJarTimestamp(taskFileStatus.getModificationTime());
+            } catch (IOException e) {
+                e.printStackTrace();
+                LOG.error("Add local task jar to container failed----\n" +
+                        "task:\n" + task.toString());
+            }
+        }
+        else{
+            LOG.error("Add local task jar to container failed----\n" +
+                    "task:\n" + task.toString());
+        }
+
     }
 }

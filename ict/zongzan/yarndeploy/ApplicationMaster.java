@@ -50,6 +50,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.net.NetUtils;
@@ -213,7 +214,10 @@ public class ApplicationMaster {
   @VisibleForTesting
   TimelineClient timelineClient;
 
-  private final String linux_bash_command = "bash";
+  // 运行的命令，如果是脚本，则为"bash"
+  // 命令跟目录在/bin，会补全为/bin/bash
+  // 这里直接运行java -jar，故为java
+  private final String linux_bash_command = "java";
   private final String windows_command = "cmd /c";
 
   /**
@@ -354,7 +358,7 @@ public class ApplicationMaster {
       }
     }
 
-    if (envs.containsKey(DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION)) {
+    /*if (envs.containsKey(DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION)) {
       scriptPath = envs.get(DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION);
 
       if (envs.containsKey(DSConstants.DISTRIBUTEDSHELLSCRIPTTIMESTAMP)) {
@@ -373,7 +377,7 @@ public class ApplicationMaster {
         throw new IllegalArgumentException(
             "Illegal values in env for shell script path");
       }
-    }
+    }*/
 
     //设置taskjar的env
     taskJarPath = envs.get(DSConstants.TASKJARLOC);
@@ -840,11 +844,6 @@ public class ApplicationMaster {
     }
 
     @Override
-    /**
-     * Connects to CM, sets up container launch context 
-     * for shell command and eventually dispatches the container
-     * start request to the CM. 
-     */
     public void run() {
       LOG.info("Setting up container launch container for containerid="
           + container.getId());
@@ -858,11 +857,12 @@ public class ApplicationMaster {
       // copied and made available to the container.
 
       //scriptPath="ExecScript"
-      Path exeScriptPath = new Path(scriptPath);
+
       //设置使用/bin/bash执行脚本
-      shellCommand = linux_bash_command;
+
 
       //将脚本加入到container
+     /* Path exeScriptPath = new Path(scriptPath);
       URL yarnUrl = null;
       try {
         yarnUrl = ConverterUtils.getYarnUrlFromURI(
@@ -881,7 +881,7 @@ public class ApplicationMaster {
       LocalResource shellRsrc = LocalResource.newInstance(yarnUrl,
       LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
       shellScriptPathLen, shellScriptPathTimestamp);
-      localResources.put(ExecShellStringPath, shellRsrc);
+      localResources.put(ExecShellStringPath, shellRsrc);*/
 
       //taskjars
       URL taskUrl = null;
@@ -902,13 +902,15 @@ public class ApplicationMaster {
 
       // Set the necessary command to execute on the allocated container
       Vector<CharSequence> vargs = new Vector<CharSequence>(5);
-
-      // Set executable command
-      vargs.add(shellCommand);
+      // 设置运行命令，不用脚本，改为直接运行命令
+      //vargs.add(shellCommand);
       // Set shell script path
-      if (!scriptPath.isEmpty()) {
+      /*if (!scriptPath.isEmpty()) {
         vargs.add(ExecShellStringPath);
-      }
+      }*/
+      shellCommand = linux_bash_command;
+      shellArgs = "-jar YarnApp.jar 1000";
+      vargs.add(shellCommand);
       // Set args for the shell command if any
       vargs.add(shellArgs);
       //Container日志路径，包含Container的输出和错误日志，位于/hadoop/userlogs/
@@ -926,13 +928,6 @@ public class ApplicationMaster {
 
       // Set up ContainerLaunchContext, setting local resource, environment,
       // command and token for constructor.
-
-      // Note for tokens: Set up tokens for the container too. Today, for normal
-      // shell commands, the container in distribute-shell doesn't need any
-      // tokens. We are populating them mainly for NodeManagers to be able to
-      // download anyfiles in the distributed file-system. The tokens are
-      // otherwise also useful in cases, for e.g., when one is running a
-      // "hadoop dfs" command inside the distributed shell.
       ContainerLaunchContext ctx = ContainerLaunchContext.newInstance(
         localResources, shellEnv, commands, null, allTokens.duplicate(), null);
       containerListener.addContainer(container.getId(), container);
@@ -941,19 +936,19 @@ public class ApplicationMaster {
     }
   }
 
-/*  private void renameScriptFile(final Path renamedScriptPath)
+    private void renameScriptFile(final Path renamedScriptPath)
       throws IOException, InterruptedException {
     appSubmitterUgi.doAs(new PrivilegedExceptionAction<Void>() {
       @Override
       public Void run() throws IOException {
-        FileSystem fs = renamedScriptPath.getFileSystem(conf);//这句抛异常了
+        FileSystem fs = renamedScriptPath.getFileSystem(conf);
         fs.rename(new Path(scriptPath), renamedScriptPath);
         return null;
       }
     });
     LOG.info("User " + appSubmitterUgi.getUserName()
         + " added suffix(.sh/.bat) to script file as " + renamedScriptPath);
-  }*/
+  }
 
   /**
    * Setup the request that will be sent to the RM for the container ask.

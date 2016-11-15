@@ -8,23 +8,29 @@ import java.util.List;
 public class Job {
     // jobid
     private long jobId;
-    // 时间戳
-    private long timestamp;
     // jobname
     private String jobName;
     // tasks
     List<Task> tasks = null;
 
+    private String description = "";
     private int tasksNum = 0;
 
     public Job(List<Task> tasks) {
         this.tasks = tasks;
-        timestamp = System.currentTimeMillis();
         tasksNum = tasks.size();
     }
 
     public Job() {
 
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public long getJobId() {
@@ -33,10 +39,6 @@ public class Job {
 
     public void setJobId(long jobId) {
         this.jobId = jobId;
-    }
-
-    public long getTimestamp() {
-        return timestamp;
     }
 
     public String getJobName() {
@@ -62,5 +64,16 @@ public class Job {
 
     public void setTasksNum(int tasksNum) {
         this.tasksNum = tasksNum;
+    }
+
+    @Override
+    public String toString() {
+        return "Job{" +
+                "jobId=" + jobId +
+                ", jobName='" + jobName + '\'' +
+                ", tasks=" + tasks +
+                ", description='" + description + '\'' +
+                ", tasksNum=" + tasksNum +
+                '}';
     }
 }
