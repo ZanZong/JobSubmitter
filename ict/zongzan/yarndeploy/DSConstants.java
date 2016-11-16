@@ -17,43 +17,41 @@
  */
 
 package ict.zongzan.yarndeploy;
-/**
- * Created by Zongzan on 2016/11/4.
- */
+
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
 /**
  * Constants used in both Client and Application Master
+ * Created by Zongzan on 2016/11/4.
  */
 @InterfaceAudience.Public
 @InterfaceStability.Unstable
 public class DSConstants {
 
   /**
-   * Environment key name pointing to the shell script's location
-   */
-  public static final String DISTRIBUTEDSHELLSCRIPTLOCATION = "DISTRIBUTEDSHELLSCRIPTLOCATION";
-
-  /**
-   * Environment key name denoting the file timestamp for the shell script. 
-   * Used to validate the local resource. 
-   */
-  public static final String DISTRIBUTEDSHELLSCRIPTTIMESTAMP = "DISTRIBUTEDSHELLSCRIPTTIMESTAMP";
-
-  /**
-   * Environment key name denoting the file content length for the shell script. 
-   * Used to validate the local resource. 
-   */
-  public static final String DISTRIBUTEDSHELLSCRIPTLEN = "DISTRIBUTEDSHELLSCRIPTLEN";
-
-  /**
    * Environment key name denoting the timeline domain ID.
    */
-  public static final String DISTRIBUTEDSHELLTIMELINEDOMAIN = "DISTRIBUTEDSHELLTIMELINEDOMAIN";
+    public static final String JOBSUBMITTERDOMAIN = "JOBSUBMITTERDOMAIN";
 
-  public static final String TASKJARLOC = "TASKJARLOC";
-  public static final String TASKJARLEN = "TASKJARLEN";
-  public static final String TASKJARTIMESTAMP = "TASKJARTIMESTAMP";
+    public static final String TASKNUM = "TASKNUM";
+    public static final String TASKIDSTRING = "TASKIDSTRING";
 
+    //分号当字符串分隔符
+    public static final String SPLIT = ";";
+
+    //Task类的成员变量名称，用来解析Json
+    public static final String RESOURCEREQUESTS = "resourceRequests";
+    public static final String TASKID = "taskId";
+    public static final String JOBID = "jobId";
+    public static final String JARPATH = "jarPath";
+    public static final String TASKJARLEN = "taskJarLen";
+    public static final String TASKJARTIMESTAMP = "taskJarTimestamp";
+    public static final String TASKJARLOCATIOIN = "taskJarLocation";
+
+    //Resource类的成员变量
+    public static final String CORES = "cores";
+    public static final String RAM = "RAM";
+    public static final String LOCALDISKSPACE = "localDiskSpace";
+    public static final String SCPS = "scps";
 }

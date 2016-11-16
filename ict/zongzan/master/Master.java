@@ -64,12 +64,12 @@ public class Master {
         for(int i = 0; i < 3; i++){
             r = new Resource(1, 1500);
             t = new Task(r, "/home/zongzan/taskjar/task" + (i+1) +".jar");
-            t.setJobId(000001);
-            t.setTaskId(9486000 + i);
+            t.setJobId("000001");
+            t.setTaskId("9486000" + i);
             tasks.add(t);
         }
         Job job = new Job(tasks);
-        job.setJobId(000001);
+        job.setJobId("000001");
         job.setJobName("TestJob");
         return job;
     }

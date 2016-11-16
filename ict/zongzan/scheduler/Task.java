@@ -5,9 +5,9 @@ package ict.zongzan.scheduler;
  */
 public class Task {
     // task主键
-    private long taskId;
+    private String taskId;
     // 所属的jobId
-    private long jobId;
+    private String jobId;
     // task请求的资源
     private Resource resourceRequests = null;
     // 执行的jar包,在加载资源的时候要用
@@ -22,6 +22,9 @@ public class Task {
         this.jarPath = jarPath;
     }
 
+    public Task() {
+    }
+
     public String getTaskJarLocation() {
         return taskJarLocation;
     }
@@ -30,19 +33,19 @@ public class Task {
         this.taskJarLocation = taskJarLocation;
     }
 
-    public long getTaskId() {
+    public String getTaskId() {
         return taskId;
     }
 
-    public void setTaskId(long taskId) {
+    public void setTaskId(String taskId) {
         this.taskId = taskId;
     }
 
-    public long getJobId() {
+    public String getJobId() {
         return jobId;
     }
 
-    public void setJobId(long jobId) {
+    public void setJobId(String jobId) {
         this.jobId = jobId;
     }
 
@@ -84,10 +87,10 @@ public class Task {
                 "taskId=" + taskId +
                 ", jobId=" + jobId +
                 ", resourceRequests=" + resourceRequests +
-                ", jarPath='" + jarPath + '\'' +
+                ", jarPath=" + jarPath  +
                 ", taskJarLen=" + taskJarLen +
                 ", taskJarTimestamp=" + taskJarTimestamp +
-                ", taskJarLocation='" + taskJarLocation + '\'' +
+                ", taskJarLocation=" + taskJarLocation +
                 '}';
     }
 }

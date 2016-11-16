@@ -39,6 +39,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonParser;
+import ict.zongzan.scheduler.Task;
+import ict.zongzan.util.TaskTransUtil;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -110,7 +114,7 @@ public class ApplicationMaster {
   public static enum DSEvent {
     DS_APP_ATTEMPT_START, DS_APP_ATTEMPT_END, DS_CONTAINER_START, DS_CONTAINER_END
   }
-  
+
   @VisibleForTesting
   @Private
   public static enum DSEntity {
@@ -187,6 +191,7 @@ public class ApplicationMaster {
   private long shellScriptPathLen = 0;
 
   //taskjar
+  private List<Task> tasks;
   private String taskJarPath = "";
   private long taskJarTimestamp = 0;
   private long taskJarLen = 0;
@@ -357,30 +362,8 @@ public class ApplicationMaster {
         shellEnv.put(key, val);
       }
     }
-
-    /*if (envs.containsKey(DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION)) {
-      scriptPath = envs.get(DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION);
-
-      if (envs.containsKey(DSConstants.DISTRIBUTEDSHELLSCRIPTTIMESTAMP)) {
-        shellScriptPathTimestamp = Long.parseLong(envs
-            .get(DSConstants.DISTRIBUTEDSHELLSCRIPTTIMESTAMP));
-      }
-      if (envs.containsKey(DSConstants.DISTRIBUTEDSHELLSCRIPTLEN)) {
-        shellScriptPathLen = Long.parseLong(envs
-            .get(DSConstants.DISTRIBUTEDSHELLSCRIPTLEN));
-      }
-      if (!scriptPath.isEmpty()
-          && (shellScriptPathTimestamp <= 0 || shellScriptPathLen <= 0)) {
-        LOG.error("Illegal values in env for shell script path" + ", path="
-            + scriptPath + ", len=" + shellScriptPathLen + ", timestamp="
-            + shellScriptPathTimestamp);
-        throw new IllegalArgumentException(
-            "Illegal values in env for shell script path");
-      }
-    }*/
-
     //设置taskjar的env
-    taskJarPath = envs.get(DSConstants.TASKJARLOC);
+   /* taskJarPath = envs.get(DSConstants.TASKJARLOC);
     taskJarLen = Long.parseLong(envs.get(DSConstants.TASKJARLEN));
     taskJarTimestamp = Long.parseLong(envs.get(DSConstants.TASKJARTIMESTAMP));
     if (!scriptPath.isEmpty()
@@ -390,18 +373,29 @@ public class ApplicationMaster {
               + taskJarTimestamp);
       throw new IllegalArgumentException(
               "Illegal values in env for task jar path");
+    }*/
+
+    String taskids = envs.get(DSConstants.TASKIDSTRING);
+    //根据id得到Json字符串，解析得到Task对象
+    Gson gson = new Gson();
+    JsonParser parser = new JsonParser();
+    List<String> ids = TaskTransUtil.getIdList(taskids);
+    for(String id : ids){
+        String taskJson = envs.get(id);
+        tasks.add(TaskTransUtil.getTask(taskJson));
     }
 
-    if (envs.containsKey(DSConstants.DISTRIBUTEDSHELLTIMELINEDOMAIN)) {
-      domainId = envs.get(DSConstants.DISTRIBUTEDSHELLTIMELINEDOMAIN);
+    if (envs.containsKey(DSConstants.JOBSUBMITTERDOMAIN)) {
+      domainId = envs.get(DSConstants.JOBSUBMITTERDOMAIN);
     }
 
-    containerMemory = Integer.parseInt(cliParser.getOptionValue(
+      //每个task的resource在提交时输入
+    /*containerMemory = Integer.parseInt(cliParser.getOptionValue(
         "container_memory", "10"));
     containerVirtualCores = Integer.parseInt(cliParser.getOptionValue(
         "container_vcores", "1"));
     numTotalContainers = Integer.parseInt(cliParser.getOptionValue(
-        "num_containers", "1"));
+        "num_containers", "1"));*/
     if (numTotalContainers == 0) {
       throw new IllegalArgumentException(
           "Cannot run distributed shell with no containers");
@@ -489,7 +483,7 @@ public class ApplicationMaster {
     // resource manager
     int maxMem = response.getMaximumResourceCapability().getMemory();
     LOG.info("Max mem capabililty of resources in this cluster " + maxMem);
-    
+
     int maxVCores = response.getMaximumResourceCapability().getVirtualCores();
     LOG.info("Max vcores capabililty of resources in this cluster " + maxVCores);
 
@@ -601,7 +595,7 @@ public class ApplicationMaster {
     FinalApplicationStatus appStatus;
     String appMessage = null;
     boolean success = true;
-    if (numFailedContainers.get() == 0 && 
+    if (numFailedContainers.get() == 0 &&
         numCompletedContainers.get() == numTotalContainers) {
       appStatus = FinalApplicationStatus.SUCCEEDED;
     } else {
@@ -620,7 +614,7 @@ public class ApplicationMaster {
     } catch (IOException e) {
       LOG.error("Failed to unregister application", e);
     }
-    
+
     amRMClient.stop();
 
     // Stop Timeline Client
@@ -676,7 +670,7 @@ public class ApplicationMaster {
               timelineClient, containerStatus, domainId, appSubmitterUgi);
         }
       }
-      
+
       // ask for more containers if any failed
       int askCount = numTotalContainers - numRequestedContainers.get();
       numRequestedContainers.addAndGet(askCount);
@@ -687,7 +681,7 @@ public class ApplicationMaster {
           amRMClient.addContainerRequest(containerAsk);
         }
       }
-      
+
       if (numCompletedContainers.get() == numTotalContainers) {
         done = true;
       }
@@ -987,7 +981,7 @@ public class ApplicationMaster {
       org.apache.commons.io.IOUtils.closeQuietly(ds);
     }
   }
-  
+
   private static void publishContainerStartEvent(
       final TimelineClient timelineClient, Container container, String domainId,
       UserGroupInformation ugi) {

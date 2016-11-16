@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonParser;
 import ict.zongzan.scheduler.Job;
 import ict.zongzan.scheduler.Task;
 import org.apache.commons.cli.CommandLine;
@@ -480,23 +482,10 @@ public class Client {
             hdfsShellScriptTimestamp = shellFileStatus.getModificationTime();
         }*/
 
-        /*String taskJarLoc = "";
-        long taskJarLen = 0;
-        long taskJarTimestamp = 0;
-        Path taskJarSrc = new Path("/home/zongzan/taskjar/YarnApp.jar");
-        String suffix = appName + "/" + appId.toString() + "/" + TASKJAR_PATH;
-        Path taskJarDst = new Path(fs.getHomeDirectory(), suffix);
-        fs.copyFromLocalFile(false, true, taskJarSrc, taskJarDst);
-        taskJarLoc = taskJarDst.toUri().toString();
-        FileStatus taskFileStatus = fs.getFileStatus(taskJarDst);
-        taskJarLen = taskFileStatus.getLen();
-        taskJarTimestamp = taskFileStatus.getModificationTime();*/
-
         // jar包添加到container
         for(Task task : job.getTasks()){
             addRescToContainer(fs, task, appId.toString());
         }
-
 
         // Set the necessary security tokens as needed
         //amContainer.setContainerTokens(containerToken);
@@ -505,17 +494,24 @@ public class Client {
         LOG.info("Set the environment for the application master");
         Map<String, String> env = new HashMap<String, String>();
         /*System.out.println("----Zongzan:hdfsShellScriptLocation: " + hdfsShellScriptLocation);
-        System.out.println("----Zongzan:taskjarLocation: " + taskJarLoc);
         env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION, hdfsShellScriptLocation);
         env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTTIMESTAMP, Long.toString(hdfsShellScriptTimestamp));
         env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTLEN, Long.toString(hdfsShellScriptLen));*/
         //taskjar
-        env.put(DSConstants.TASKJARLOC, taskJarLoc);
-        env.put(DSConstants.TASKJARTIMESTAMP, Long.toString(taskJarTimestamp));
-        env.put(DSConstants.TASKJARLEN, Long.toString(taskJarLen));
+        env.put(DSConstants.TASKNUM, String.valueOf(job.getTasksNum()));
+        StringBuilder ids = new StringBuilder();
+        for(Task task : job.getTasks())
+            ids.append(task.getTaskId() + DSConstants.SPLIT);
+        env.put(DSConstants.TASKIDSTRING, ids.toString());
+
+        // 转换成json格式传到AM
+        Gson gson = new Gson();
+        for(Task task : job.getTasks()){
+            env.put(task.getTaskId(), gson.toJson(task));
+        }
 
         if (domainId != null && domainId.length() > 0) {
-            env.put(DSConstants.DISTRIBUTEDSHELLTIMELINEDOMAIN, domainId);
+            env.put(DSConstants.JOBSUBMITTERDOMAIN, domainId);
         }
 
        //设置ClassPath，将ApplicationMaster类加入其中

@@ -7,7 +7,7 @@ import java.util.List;
  */
 public class Job {
     // jobid
-    private long jobId;
+    private String jobId;
     // jobname
     private String jobName;
     // tasks
@@ -33,11 +33,11 @@ public class Job {
         this.description = description;
     }
 
-    public long getJobId() {
+    public String getJobId() {
         return jobId;
     }
 
-    public void setJobId(long jobId) {
+    public void setJobId(String jobId) {
         this.jobId = jobId;
     }
 
