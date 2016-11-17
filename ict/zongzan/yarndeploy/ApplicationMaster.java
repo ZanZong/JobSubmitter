@@ -190,8 +190,10 @@ public class ApplicationMaster {
   // File length needed for local resource
   private long shellScriptPathLen = 0;
 
+
+  private List<Task> tasks = new ArrayList<Task>();
   //taskjar
-  private List<Task> tasks;
+  private static int testInc = 0;
   private String taskJarPath = "";
   private long taskJarTimestamp = 0;
   private long taskJarLen = 0;
@@ -380,12 +382,17 @@ public class ApplicationMaster {
     Gson gson = new Gson();
     JsonParser parser = new JsonParser();
     List<String> ids = TaskTransUtil.getIdList(taskids);
+    // 创建task对象
+    LOG.info("zongzan------taskids:" + ids.toString());
     for(String id : ids){
         String taskJson = envs.get(id);
+        LOG.info("taskid=" + id + " taskJson:" + taskJson);
         tasks.add(TaskTransUtil.getTask(taskJson));
     }
+    LOG.info("Get task list from client. task number = " + tasks.size());
 
-    if (envs.containsKey(DSConstants.JOBSUBMITTERDOMAIN)) {
+
+      if (envs.containsKey(DSConstants.JOBSUBMITTERDOMAIN)) {
       domainId = envs.get(DSConstants.JOBSUBMITTERDOMAIN);
     }
 
@@ -396,9 +403,10 @@ public class ApplicationMaster {
         "container_vcores", "1"));
     numTotalContainers = Integer.parseInt(cliParser.getOptionValue(
         "num_containers", "1"));*/
+    numTotalContainers = tasks.size();
     if (numTotalContainers == 0) {
       throw new IllegalArgumentException(
-          "Cannot run distributed shell with no containers");
+          "Cannot run task with no containers. Total containers number is 0");
     }
     requestPriority = Integer.parseInt(cliParser
         .getOptionValue("priority", "0"));
@@ -488,7 +496,8 @@ public class ApplicationMaster {
     LOG.info("Max vcores capabililty of resources in this cluster " + maxVCores);
 
     // A resource ask cannot exceed the max.
-    if (containerMemory > maxMem) {
+    // 先不做检验
+    /*if (containerMemory > maxMem) {
       LOG.info("Container memory specified above max threshold of cluster."
           + " Using max value." + ", specified=" + containerMemory + ", max="
           + maxMem);
@@ -500,7 +509,7 @@ public class ApplicationMaster {
           + " Using max value." + ", specified=" + containerVirtualCores + ", max="
           + maxVCores);
       containerVirtualCores = maxVCores;
-    }
+    }*/
 
     // 向RM请求Container
     List<Container> previousAMRunningContainers =
@@ -515,8 +524,8 @@ public class ApplicationMaster {
     // 循环向RM请求Container，直到所有所需的资源全部被请求到
     // 并循环启动所有的Container并执行程序，执行结果（success/failure）并不关心
 
-    for (int i = 0; i < numTotalContainersToRequest; ++i) {
-      ContainerRequest containerAsk = setupContainerAskForRM();
+    for (int i = 0; i < tasks.size(); ++i) {
+      ContainerRequest containerAsk = setupContainerAskForRM(tasks.get(i));
       amRMClient.addContainerRequest(containerAsk);
     }
     numRequestedContainers.set(numTotalContainers);
@@ -595,8 +604,7 @@ public class ApplicationMaster {
     FinalApplicationStatus appStatus;
     String appMessage = null;
     boolean success = true;
-    if (numFailedContainers.get() == 0 &&
-        numCompletedContainers.get() == numTotalContainers) {
+    if (numFailedContainers.get() == 0) {
       appStatus = FinalApplicationStatus.SUCCEEDED;
     } else {
       appStatus = FinalApplicationStatus.FAILED;
@@ -671,8 +679,8 @@ public class ApplicationMaster {
         }
       }
 
-      // ask for more containers if any failed
-      int askCount = numTotalContainers - numRequestedContainers.get();
+      // Container执行失败，重新申请执行该task
+     /* int askCount = numTotalContainers - numRequestedContainers.get();
       numRequestedContainers.addAndGet(askCount);
 
       if (askCount > 0) {
@@ -684,7 +692,7 @@ public class ApplicationMaster {
 
       if (numCompletedContainers.get() == numTotalContainers) {
         done = true;
-      }
+      }*/
     }
 
     @Override
@@ -695,7 +703,7 @@ public class ApplicationMaster {
           + allocatedContainers.size());
       numAllocatedContainers.addAndGet(allocatedContainers.size());
       for (Container allocatedContainer : allocatedContainers) {
-        LOG.info("Launching shell command on a new container."
+        LOG.info("Launching task on a new container."
             + ", containerId=" + allocatedContainer.getId()
             + ", containerNode=" + allocatedContainer.getNodeId().getHost()
             + ":" + allocatedContainer.getNodeId().getPort()
@@ -707,9 +715,15 @@ public class ApplicationMaster {
             + ", containerToken"
             + allocatedContainer.getContainerToken().getIdentifier().toString());
 
+          /**
+           * scheduler应该在此处，每次分配得到一个container，就执行一个task
+           * 待实现
+           * 现在的启动时无序的
+           */
+
         //启动Container线程
         LaunchContainerRunnable runnableLaunchContainer =
-                new LaunchContainerRunnable(allocatedContainer, containerListener);
+                new LaunchContainerRunnable(allocatedContainer, containerListener, tasks.get(testInc++));
         Thread launchThread = new Thread(runnableLaunchContainer);
 
         // launch and start the container on a separate thread to keep
@@ -826,15 +840,20 @@ public class ApplicationMaster {
     Container container;
     //
     NMCallbackHandler containerListener;
+    //task info
+    Task task = null;
+
 
     /**
      * @param lcontainer Allocated container
      * @param containerListener Callback handler of the container
      */
     public LaunchContainerRunnable(
-        Container lcontainer, NMCallbackHandler containerListener) {
+        Container lcontainer, NMCallbackHandler containerListener, Task task) {
       this.container = lcontainer;
       this.containerListener = containerListener;
+      //要执行的task
+      this.task = task;
     }
 
     @Override
@@ -878,7 +897,7 @@ public class ApplicationMaster {
       localResources.put(ExecShellStringPath, shellRsrc);*/
 
       //taskjars
-      URL taskUrl = null;
+      /*URL taskUrl = null;
       try{
         taskUrl = ConverterUtils.getYarnUrlFromURI(
                 new URI(taskJarPath));
@@ -892,8 +911,22 @@ public class ApplicationMaster {
       LocalResource taskJarRsrc = LocalResource.newInstance(taskUrl,
               LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
               taskJarLen, taskJarTimestamp);
-      localResources.put("YarnApp.jar", taskJarRsrc);
-
+      localResources.put("YarnApp.jar", taskJarRsrc);*/
+        URL taskUrl = null;
+        try{
+            taskUrl = ConverterUtils.getYarnUrlFromURI(
+                    new URI(task.getTaskJarLocation()));
+        } catch (URISyntaxException e){
+            LOG.error("Error when trying to use task jar path specified"
+                    + " in env, path=" + taskJarPath, e);
+            numCompletedContainers.incrementAndGet();
+            numFailedContainers.incrementAndGet();
+            return;
+        }
+        LocalResource taskJarRsrc = LocalResource.newInstance(taskUrl,
+                LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
+                task.getTaskJarLen(), task.getTaskJarTimestamp());
+        localResources.put(TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()), taskJarRsrc);
       // Set the necessary command to execute on the allocated container
       Vector<CharSequence> vargs = new Vector<CharSequence>(5);
       // 设置运行命令，不用脚本，改为直接运行命令
@@ -903,7 +936,7 @@ public class ApplicationMaster {
         vargs.add(ExecShellStringPath);
       }*/
       shellCommand = linux_bash_command;
-      shellArgs = "-jar YarnApp.jar 1000";
+      shellArgs = "-jar " + TaskTransUtil.getFileNameByPath(task.getTaskJarLocation());
       vargs.add(shellCommand);
       // Set args for the shell command if any
       vargs.add(shellArgs);
@@ -950,17 +983,14 @@ public class ApplicationMaster {
    * @return the setup ResourceRequest to be sent to RM
    */
   //设置需要请求的Container，
-  private ContainerRequest setupContainerAskForRM() {
-    // setup requirements for hosts
-    // using * as any host will do for the distributed shell app
-    // set the priority for the request
-    // TODO - what is the range for priority? how to decide?
-    Priority pri = Priority.newInstance(requestPriority);
+  private ContainerRequest setupContainerAskForRM(Task task) {
+
+    Priority pri = Priority.newInstance(task.getPriority());
 
     // Set up resource type requirements
     // For now, memory and CPU are supported so we set memory and cpu requirements
-    Resource capability = Resource.newInstance(containerMemory,
-      containerVirtualCores);
+    Resource capability = Resource.newInstance(task.getResourceRequests().getRAM(),
+      task.getResourceRequests().getCores());
 
     ContainerRequest request = new ContainerRequest(capability, null, null,
         pri);

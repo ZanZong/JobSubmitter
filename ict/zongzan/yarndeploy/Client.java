@@ -11,7 +11,6 @@ import java.util.Map;
 import java.util.Vector;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonParser;
 import ict.zongzan.scheduler.Job;
 import ict.zongzan.scheduler.Task;
 import org.apache.commons.cli.CommandLine;
@@ -508,6 +507,7 @@ public class Client {
         Gson gson = new Gson();
         for(Task task : job.getTasks()){
             env.put(task.getTaskId(), gson.toJson(task));
+            LOG.info("taskString:" +  gson.toJson(task));
         }
 
         if (domainId != null && domainId.length() > 0) {
@@ -800,10 +800,10 @@ public class Client {
 
     private void addRescToContainer(FileSystem fs, Task task, String appId){
         String srcp = task.getJarPath();
-        String[] tmp = srcp.split("//");
+        String[] tmp = srcp.split("/");
         if(tmp.length > 0){
             Path taskJarSrc = new Path(task.getJarPath());
-            String suffix = appName + "/" + appId + "/" + tmp[tmp.length - 1];//解析
+            String suffix = appName + "/" + appId + "/" + tmp[tmp.length - 1];//解析文件名
             Path taskJarDst = new Path(fs.getHomeDirectory(), suffix);
             try {
                 fs.copyFromLocalFile(false, true, taskJarSrc, taskJarDst);
@@ -821,6 +821,7 @@ public class Client {
             LOG.error("Add local task jar to container failed----\n" +
                     "task:\n" + task.toString());
         }
+        LOG.info("Add task jar to Container. Task id = " + task.getTaskId());
 
     }
 }

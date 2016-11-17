@@ -11,7 +11,7 @@ public class Resource {
     // 磁盘大小
     private int localDiskSpace = 0;
     // core seconds per second
-    private double scps = 0.0;
+    private double scps = 0;
 
     public Resource(int cores, int RAM, int localDiskSpace, double scps) {
         this.cores = cores;

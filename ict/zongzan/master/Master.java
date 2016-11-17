@@ -3,6 +3,7 @@ package ict.zongzan.master;
 import ict.zongzan.scheduler.Job;
 import ict.zongzan.scheduler.Resource;
 import ict.zongzan.scheduler.Task;
+import ict.zongzan.util.TaskTransUtil;
 import ict.zongzan.yarndeploy.Client;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -25,7 +26,7 @@ public class Master {
         boolean result = false;
         try{
             Client yarnClient = new Client();
-            yarnClient.setJob(jobFactory());
+            yarnClient.setJob(TaskTransUtil.jobFactory());
             // 初始化client
             try {
                 boolean doRun = yarnClient.init(args);
@@ -52,26 +53,6 @@ public class Master {
             LOG.error("Application failed!");
             System.exit(1);
         }
-
-        System.out.println(jobFactory().toString());
-        LOG.debug(jobFactory().toString());
-    }
-
-    public static Job jobFactory(){
-        List<Task> tasks = new ArrayList<Task>();
-        Task t = null;
-        Resource r = null;
-        for(int i = 0; i < 3; i++){
-            r = new Resource(1, 1500);
-            t = new Task(r, "/home/zongzan/taskjar/task" + (i+1) +".jar");
-            t.setJobId("000001");
-            t.setTaskId("9486000" + i);
-            tasks.add(t);
-        }
-        Job job = new Job(tasks);
-        job.setJobId("000001");
-        job.setJobName("TestJob");
-        return job;
     }
 
 }

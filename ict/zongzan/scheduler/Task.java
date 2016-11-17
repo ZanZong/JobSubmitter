@@ -12,10 +12,14 @@ public class Task {
     private Resource resourceRequests = null;
     // 执行的jar包,在加载资源的时候要用
     private String jarPath = "";
-    // 传给AM解析，加载资源
+    // 传给AM解析，加载hdfs资源
     private long taskJarLen = 0;
     private long taskJarTimestamp = 0;
     private String taskJarLocation = "";
+    // 执行顺序schedule
+    private String nextTask = "";
+    // 优先级
+    private int priority = 0;
 
     public Task(Resource resourceRequest, String jarPath) {
         this.resourceRequests = resourceRequest;
@@ -81,16 +85,34 @@ public class Task {
         this.taskJarTimestamp = taskJarTimestamp;
     }
 
+    public String getNextTask() {
+        return nextTask;
+    }
+
+    public void setNextTask(String nextTask) {
+        this.nextTask = nextTask;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
     @Override
     public String toString() {
         return "Task{" +
-                "taskId=" + taskId +
-                ", jobId=" + jobId +
+                "taskId='" + taskId + '\'' +
+                ", jobId='" + jobId + '\'' +
                 ", resourceRequests=" + resourceRequests +
-                ", jarPath=" + jarPath  +
+                ", jarPath='" + jarPath + '\'' +
                 ", taskJarLen=" + taskJarLen +
                 ", taskJarTimestamp=" + taskJarTimestamp +
-                ", taskJarLocation=" + taskJarLocation +
+                ", taskJarLocation='" + taskJarLocation + '\'' +
+                ", nextTask='" + nextTask + '\'' +
+                ", priority=" + priority +
                 '}';
     }
 }

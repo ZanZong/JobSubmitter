@@ -50,17 +50,19 @@ public class TaskTransUtil {
                 throw new IllegalArgumentException();
             }
             else{
-                task.setTaskId(jsonObject.get(DSConstants.TASKID).toString());
-                task.setJobId(jsonObject.get(DSConstants.JOBID).toString());
-                task.setJarPath(jsonObject.get(DSConstants.JARPATH).toString());
-                task.setTaskJarLen(Long.parseLong(jsonObject.get(DSConstants.TASKJARLEN).toString()));
-                task.setTaskJarLocation(jsonObject.get(DSConstants.TASKJARLOCATIOIN).toString());
-                task.setTaskJarTimestamp(Long.parseLong(jsonObject.get(DSConstants.TASKJARTIMESTAMP).toString()));
+                task.setTaskId(jsonObject.get(DSConstants.TASKID).getAsString());
+                task.setJobId(jsonObject.get(DSConstants.JOBID).getAsString());
+                task.setJarPath(jsonObject.get(DSConstants.JARPATH).getAsString());
+                task.setTaskJarLen(jsonObject.get(DSConstants.TASKJARLEN).getAsLong());
+                task.setTaskJarLocation(jsonObject.get(DSConstants.TASKJARLOCATIOIN).getAsString());
+                task.setTaskJarTimestamp(jsonObject.get(DSConstants.TASKJARTIMESTAMP).getAsLong());
+                task.setPriority(jsonObject.get(DSConstants.PRIORITY).getAsInt());
+                task.setNextTask(jsonObject.get(DSConstants.NEXTTASK).getAsString());
 
-                Resource r = new Resource(Integer.parseInt(resourceObject.get(DSConstants.CORES).toString()),
-                        Integer.parseInt(resourceObject.get(DSConstants.RAM).toString()),
-                        Integer.parseInt(resourceObject.get(DSConstants.LOCALDISKSPACE).toString()),
-                        Integer.parseInt(resourceObject.get(DSConstants.SCPS).toString()));
+                Resource r = new Resource(resourceObject.get(DSConstants.CORES).getAsInt(),
+                        resourceObject.get(DSConstants.RAM).getAsInt(),
+                        resourceObject.get(DSConstants.LOCALDISKSPACE).getAsInt(),
+                        resourceObject.get(DSConstants.SCPS).getAsDouble());
                 task.setResourceRequests(r);
             }
         }
@@ -76,11 +78,18 @@ public class TaskTransUtil {
         List<Task> tasks = new ArrayList<Task>();
         Task t = null;
         Resource r = null;
-        for(int i = 0; i < 3; i++){
+        for(int i = 0; i < 4; i++){
             r = new Resource(1, 1500);
             t = new Task(r, "/home/zongzan/taskjar/task" + (i+1) +".jar");
             t.setJobId("000001");
-            t.setTaskId("9486000" + i);
+            t.setTaskId("8600" + i);
+            if(i < 3){
+                t.setNextTask("86003");
+            }
+            else{
+                t.setNextTask("null");
+            }
+            t.setPriority(1);
             tasks.add(t);
         }
         Job job = new Job(tasks);
@@ -89,14 +98,24 @@ public class TaskTransUtil {
         return job;
     }
 
-
+    public static String getFileNameByPath(String URI){
+        final String SPLIT = "/";
+        String[] res = URI.split(SPLIT);
+        if(res.length > 0){
+            return res[res.length - 1];
+        }
+        else
+            return "ERROR";
+    }
     //test
     public static void main(String[] args){
+        // 对解析字符串测试
         Job job = jobFactory();
-        Gson gson = new Gson();
+        System.out.println(job.toString());
+
+       /* Gson gson = new Gson();
         String taskString = gson.toJson(job.getTasks().get(0));
         System.out.println(taskString);
-
         JsonParser parser = new JsonParser();
         JsonElement element = parser.parse(taskString);
 
@@ -111,6 +130,21 @@ public class TaskTransUtil {
         System.out.println("resource:" + resObject.toString());
 
         System.out.println("ram:" + resObject.get("RAM").toString());
+*/
+        //测试getFileNameByPath
+       /* String s = getFileNameByPath("hdfs://hw115:9000//user/root/JobSubmitter/application_001/task1.jar");
+        System.out.println(s);
+*/
+
+        //测试getTask()
+        String s = "{\"taskId\":\"86000\",\"jobId\":\"000001\",\"resourceRequests\"" +
+                ":{\"cores\":1,\"RAM\":1500,\"localDiskSpace\":0,\"scps\":0.0},\"jarPath\":\"/home/zongzan/taskjar/task1.jar\",\"taskJarLen\":53152605,\"taskJarTimestamp\":1479308270442,\"taskJarLocation\":\"hdfs://hw115:9000/user/root/JobSubmitter/application_1479024382672_0027/task1.jar\",\"nextTask\":\"86003\",\"priority\":1}";
+        Task t = getTask(s);
+        System.out.println(t.toString());
+        /*System.out.println(t.getJarPath());
+        System.out.println(t.getTaskJarTimestamp());
+        System.out.println(t.getResourceRequests().toString());
+*/
 
 
     }

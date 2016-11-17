@@ -48,6 +48,8 @@ public class DSConstants {
     public static final String TASKJARLEN = "taskJarLen";
     public static final String TASKJARTIMESTAMP = "taskJarTimestamp";
     public static final String TASKJARLOCATIOIN = "taskJarLocation";
+    public static final String NEXTTASK = "nextTask";
+    public static final String PRIORITY = "priority";
 
     //Resource类的成员变量
     public static final String CORES = "cores";
