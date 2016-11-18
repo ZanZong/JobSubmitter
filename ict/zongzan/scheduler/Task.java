@@ -18,7 +18,10 @@ public class Task {
     private String taskJarLocation = "";
     // 执行顺序schedule
     private String nextTask = "";
-    // 优先级
+    // 这个可以由nextTask变量通过DAG得到
+    // 有该变量会比较简单，待讨论
+    private int execSequence = 0;
+    // coontainer申请的优先级
     private int priority = 0;
 
     public Task(Resource resourceRequest, String jarPath) {
@@ -27,6 +30,14 @@ public class Task {
     }
 
     public Task() {
+    }
+
+    public int getExecSequence() {
+        return execSequence;
+    }
+
+    public void setExecSequence(int execSequence) {
+        this.execSequence = execSequence;
     }
 
     public String getTaskJarLocation() {
@@ -114,5 +125,41 @@ public class Task {
                 ", nextTask='" + nextTask + '\'' +
                 ", priority=" + priority +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        Task task = (Task) o;
+
+        if (taskJarLen != task.taskJarLen) return false;
+        if (taskJarTimestamp != task.taskJarTimestamp) return false;
+        if (execSequence != task.execSequence) return false;
+        if (priority != task.priority) return false;
+        if (!taskId.equals(task.taskId)) return false;
+        if (!jobId.equals(task.jobId)) return false;
+        if (!resourceRequests.equals(task.resourceRequests)) return false;
+        if (jarPath != null ? !jarPath.equals(task.jarPath) : task.jarPath != null) return false;
+        if (taskJarLocation != null ? !taskJarLocation.equals(task.taskJarLocation) : task.taskJarLocation != null)
+            return false;
+        return nextTask != null ? nextTask.equals(task.nextTask) : task.nextTask == null;
+
+    }
+
+    @Override
+    public int hashCode() {
+        int result = taskId.hashCode();
+        result = 31 * result + jobId.hashCode();
+        result = 31 * result + resourceRequests.hashCode();
+        result = 31 * result + (jarPath != null ? jarPath.hashCode() : 0);
+        result = 31 * result + (int) (taskJarLen ^ (taskJarLen >>> 32));
+        result = 31 * result + (int) (taskJarTimestamp ^ (taskJarTimestamp >>> 32));
+        result = 31 * result + (taskJarLocation != null ? taskJarLocation.hashCode() : 0);
+        result = 31 * result + (nextTask != null ? nextTask.hashCode() : 0);
+        result = 31 * result + execSequence;
+        result = 31 * result + priority;
+        return result;
     }
 }

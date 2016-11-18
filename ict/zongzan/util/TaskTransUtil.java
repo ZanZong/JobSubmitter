@@ -58,6 +58,7 @@ public class TaskTransUtil {
                 task.setTaskJarTimestamp(jsonObject.get(DSConstants.TASKJARTIMESTAMP).getAsLong());
                 task.setPriority(jsonObject.get(DSConstants.PRIORITY).getAsInt());
                 task.setNextTask(jsonObject.get(DSConstants.NEXTTASK).getAsString());
+                task.setExecSequence(jsonObject.get(DSConstants.EXECSEQUENCE).getAsInt());
 
                 Resource r = new Resource(resourceObject.get(DSConstants.CORES).getAsInt(),
                         resourceObject.get(DSConstants.RAM).getAsInt(),
@@ -83,19 +84,34 @@ public class TaskTransUtil {
             t = new Task(r, "/home/zongzan/taskjar/task" + (i+1) +".jar");
             t.setJobId("000001");
             t.setTaskId("8600" + i);
-            if(i < 3){
-                t.setNextTask("86003");
+            if(i < 2){
+                t.setNextTask("86002");
             }
-            else{
+            if(i == 2)
+                t.setNextTask("86004");
+            if(i == 3)
                 t.setNextTask("null");
-            }
             t.setPriority(1);
             tasks.add(t);
         }
+        tasks.get(0).setExecSequence(0);
+        tasks.get(1).setExecSequence(0);
+        tasks.get(2).setExecSequence(1);
+        tasks.get(3).setExecSequence(2);
+
         Job job = new Job(tasks);
         job.setJobId("000001");
         job.setJobName("TestJob");
         return job;
+    }
+
+    public static Task getTaskById(String id, List<Task> tasks) {
+        for(Task task : tasks){
+            if(task.getTaskId().equals(id)){
+                return task;
+            }
+        }
+        return null;
     }
 
     public static String getFileNameByPath(String URI){
