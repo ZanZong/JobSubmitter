@@ -588,7 +588,7 @@ public class ApplicationMaster {
         //这里是等待10s
         for (Thread launchThread : launchThreads) {
             try {
-                launchThread.join(20000);
+                launchThread.join(10000);
             } catch (InterruptedException e) {
                 LOG.info("Exception thrown in thread join: " + e.getMessage());
                 e.printStackTrace();
@@ -723,66 +723,11 @@ public class ApplicationMaster {
                         + ", containerToken"
                         + allocatedContainer.getContainerToken().getIdentifier().toString());
             }
-            /**
-             * scheduler应该在此处，每次分配得到container，就执行某些task
-             * 应该按照一定的规则分配container，待实现
-             * 现在的启动时无序的、平等的
-             */
+
             //此处线程同步
-            synchronized (schedule.toBeExecutedTasks) {
+           // synchronized (schedule.containersPool) {
                 schedule.addNewContainerToPool(allocatedContainers);
-                Set<String> tobeExecutedid = schedule.getToBeExecutedTasks();
-                int containerNum = schedule.getContainersPoolSize();
-                if (containerNum == tobeExecutedid.size()) {
-                    for(String id : tobeExecutedid){
-                        Task t = TaskTransUtil.getTaskById(id, tasks);
-                        Container container = schedule.getContainerFromPool();
-                        if(container == null){
-                            LOG.error("Failed to get container from pool.");
-                            return;
-                        }
-                        runLaunchContainerThread(container, containerListener, t);
-                        schedule.moveFromReady2Run(t.getTaskId());
-                    }
-                }
-                else if (containerNum > tobeExecutedid.size()) {
-                    // 多余的Container存在容器池中
-                    // 将待执行task全部执行
-                    for(String id : tobeExecutedid){
-                        Task t = TaskTransUtil.getTaskById(id, tasks);
-                        Container container = schedule.getContainerFromPool();
-                        if(container == null){
-                            LOG.error("Failed to get container from pool.");
-                            return;
-                        }
-                        runLaunchContainerThread(container, containerListener, t);
-                    }
-
-                    try {
-                        //阻塞这个线程
-                        
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-
-                }
-                else {
-                    // 选取前n个task执行
-                    LOG.info("执行到了else，该方法没写完");
-                }
-            }
-        }
-
-
-        //封装用来启动Container线程
-        public void runLaunchContainerThread(Container container, NMCallbackHandler containerListener, Task task){
-            //启动Container线程
-            LaunchContainerRunnable runnableLaunchContainer =
-                    new LaunchContainerRunnable(container, containerListener, task);
-            Thread launchThread = new Thread(runnableLaunchContainer);
-            launchThreads.add(launchThread);
-            launchThread.start();
-
+           // }
         }
 
         @Override
@@ -810,74 +755,51 @@ public class ApplicationMaster {
     }
 
 
-    @VisibleForTesting
-    static class NMCallbackHandler
-            implements NMClientAsync.CallbackHandler {
 
-        private ConcurrentMap<ContainerId, Container> containers =
-                new ConcurrentHashMap<ContainerId, Container>();
-        private final ApplicationMaster applicationMaster;
+    /**
+     *  该线程为scheduler线程，在AM run()时启动，监控当前task执行状态和
+     *  RM分配container的状态，完成调度
+     *
+     *  scheduler应该在此处，每次分配得到container，就执行某些task
+     *  应该按照一定的规则分配container，待实现
+     *  现在的启动时无序的、平等的
+     */
+    private class ScheduleThread implements Runnable {
 
-        public NMCallbackHandler(ApplicationMaster applicationMaster) {
-            this.applicationMaster = applicationMaster;
+        public ScheduleThread() {
         }
-
-        public void addContainer(ContainerId containerId, Container container) {
-            containers.putIfAbsent(containerId, container);
-        }
-
         @Override
-        public void onContainerStopped(ContainerId containerId) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Succeeded to stop Container " + containerId);
-            }
-            containers.remove(containerId);
-        }
+        public void run() {
+            Set<String> tobeExecTasks = null;
+            int containerPoolSize = 0;
+            while(){
+                tobeExecTasks = schedule.getToBeExecutedTasks();
+                containerPoolSize = schedule.getContainersPoolSize();
+                if(tobeExecTasks.size() == containerPoolSize){
+                    // 全部启动
+                   for(String id : tobeExecTasks){
+                       Task t = TaskTransUtil.getTaskById(id, tasks);
+                       Container container = schedule.getContainerFromPool();
+                       runLaunchContainerThread(container, containerListener, t);
+                       schedule.removeContainerFromPool(container.getId().toString());
+                       schedule.moveFromReady2Run(t.getTaskId());
+                   }
+                }
+                else if (tobeExecTasks.size() < containerPoolSize) {
+                    synchronized (schedule.toBeExecutedTasks) {
 
-        @Override
-        public void onContainerStatusReceived(ContainerId containerId,
-                                              ContainerStatus containerStatus) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Container Status: id=" + containerId + ", status=" +
-                        containerStatus);
-            }
-        }
-
-        @Override
-        public void onContainerStarted(ContainerId containerId,
-                                       Map<String, ByteBuffer> allServiceResponse) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Succeeded to start Container " + containerId);
-            }
-            Container container = containers.get(containerId);
-            if (container != null) {
-                applicationMaster.nmClientAsync.getContainerStatusAsync(containerId, container.getNodeId());
-            }
-            if (applicationMaster.timelineClient != null) {
-                ApplicationMaster.publishContainerStartEvent(
-                        applicationMaster.timelineClient, container,
-                        applicationMaster.domainId, applicationMaster.appSubmitterUgi);
+                    }
+                }
             }
         }
-
-        @Override
-        public void onStartContainerError(ContainerId containerId, Throwable t) {
-            LOG.error("Failed to start Container " + containerId);
-            containers.remove(containerId);
-            applicationMaster.numCompletedContainers.incrementAndGet();
-            applicationMaster.numFailedContainers.incrementAndGet();
-        }
-
-        @Override
-        public void onGetContainerStatusError(
-                ContainerId containerId, Throwable t) {
-            LOG.error("Failed to query the status of Container " + containerId);
-        }
-
-        @Override
-        public void onStopContainerError(ContainerId containerId, Throwable t) {
-            LOG.error("Failed to stop Container " + containerId);
-            containers.remove(containerId);
+        //封装用来启动Container线程
+        public void runLaunchContainerThread(Container container, NMCallbackHandler containerListener, Task task){
+            //启动Container线程
+            LaunchContainerRunnable runnableLaunchContainer =
+                    new LaunchContainerRunnable(container, containerListener, task);
+            Thread launchThread = new Thread(runnableLaunchContainer);
+            launchThreads.add(launchThread);
+            launchThread.start();
         }
     }
 
@@ -997,6 +919,79 @@ public class ApplicationMaster {
         LOG.info("User " + appSubmitterUgi.getUserName()
                 + " added suffix(.sh/.bat) to script file as " + renamedScriptPath);
     }
+
+
+    @VisibleForTesting
+    static class NMCallbackHandler
+            implements NMClientAsync.CallbackHandler {
+
+        private ConcurrentMap<ContainerId, Container> containers =
+                new ConcurrentHashMap<ContainerId, Container>();
+        private final ApplicationMaster applicationMaster;
+
+        public NMCallbackHandler(ApplicationMaster applicationMaster) {
+            this.applicationMaster = applicationMaster;
+        }
+
+        public void addContainer(ContainerId containerId, Container container) {
+            containers.putIfAbsent(containerId, container);
+        }
+
+        @Override
+        public void onContainerStopped(ContainerId containerId) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Succeeded to stop Container " + containerId);
+            }
+            containers.remove(containerId);
+        }
+
+        @Override
+        public void onContainerStatusReceived(ContainerId containerId,
+                                              ContainerStatus containerStatus) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Container Status: id=" + containerId + ", status=" +
+                        containerStatus);
+            }
+        }
+
+        @Override
+        public void onContainerStarted(ContainerId containerId,
+                                       Map<String, ByteBuffer> allServiceResponse) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Succeeded to start Container " + containerId);
+            }
+            Container container = containers.get(containerId);
+            if (container != null) {
+                applicationMaster.nmClientAsync.getContainerStatusAsync(containerId, container.getNodeId());
+            }
+            if (applicationMaster.timelineClient != null) {
+                ApplicationMaster.publishContainerStartEvent(
+                        applicationMaster.timelineClient, container,
+                        applicationMaster.domainId, applicationMaster.appSubmitterUgi);
+            }
+        }
+
+        @Override
+        public void onStartContainerError(ContainerId containerId, Throwable t) {
+            LOG.error("Failed to start Container " + containerId);
+            containers.remove(containerId);
+            applicationMaster.numCompletedContainers.incrementAndGet();
+            applicationMaster.numFailedContainers.incrementAndGet();
+        }
+
+        @Override
+        public void onGetContainerStatusError(
+                ContainerId containerId, Throwable t) {
+            LOG.error("Failed to query the status of Container " + containerId);
+        }
+
+        @Override
+        public void onStopContainerError(ContainerId containerId, Throwable t) {
+            LOG.error("Failed to stop Container " + containerId);
+            containers.remove(containerId);
+        }
+    }
+
 
     /**
      * Setup the request that will be sent to the RM for the container ask.
