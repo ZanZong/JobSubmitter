@@ -148,8 +148,6 @@ public class Client {
 
     public static final String SCRIPT_PATH = "ExecScript.sh";
 
-    public static final String TASKJAR_PATH = "YarnApp.jar";
-
     public Client(Configuration conf) throws Exception  {
         this(
                 "ict.zongzan.yarndeploy.ApplicationMaster",

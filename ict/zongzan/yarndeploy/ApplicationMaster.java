@@ -35,16 +35,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonParser;
 import ict.zongzan.scheduler.Schedule;
 import ict.zongzan.scheduler.Task;
+import ict.zongzan.scheduler.TaskSet;
 import ict.zongzan.util.TaskTransUtil;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.collections.map.HashedMap;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -94,8 +94,8 @@ import org.apache.hadoop.yarn.client.api.async.impl.NMClientAsyncImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
-import org.apache.hadoop.yarn.sls.scheduler.TaskRunner;
 import org.apache.hadoop.yarn.util.ConverterUtils;
+import org.apache.hadoop.yarn.util.SystemClock;
 import org.apache.log4j.LogManager;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -190,11 +190,6 @@ public class ApplicationMaster {
 
 
     private List<Task> tasks = new ArrayList<Task>();
-    //taskjar
-    private static int testInc = 0;
-    private String taskJarPath = "";
-    private long taskJarTimestamp = 0;
-    private long taskJarLen = 0;
 
     // Timeline domain ID
     private String domainId = null;
@@ -217,6 +212,17 @@ public class ApplicationMaster {
 
     //scheduler
     Schedule schedule;
+    // container等待队列
+    Queue<Task> taskQueue = new LinkedList<Task>();
+    //Map: alloc containerid --> taskid
+    Map<String, String> ctMap = new HashMap<>();
+    //Map: 每个set里的task完成数量setid --> num
+    Map<String, Integer> cmpltTaskNumOfSet = new HashMap<>();
+    //Map: 每个set里task的数量
+    Map<String, Integer> totalTaskNumOfSet = new HashMap<>();
+    //Map: 用来唤醒等待该set完成的Scheduler线程
+    Map<String, TaskSet> wakeUp = new HashMap<>();
+
 
     // Timeline Client
     @VisibleForTesting
@@ -226,7 +232,6 @@ public class ApplicationMaster {
     // 命令跟目录在/bin，会补全为/bin/bash
     // 这里直接运行java -jar，故为java
     private final String linux_bash_command = "java";
-    private final String windows_command = "cmd /c";
 
     /**
      * @param args Command line args
@@ -379,8 +384,8 @@ public class ApplicationMaster {
 
         String taskids = envs.get(DSConstants.TASKIDSTRING);
         //根据id得到Json字符串，解析得到Task对象
-        Gson gson = new Gson();
-        JsonParser parser = new JsonParser();
+        //Gson gson = new Gson();
+        //JsonParser parser = new JsonParser();
         List<String> ids = TaskTransUtil.getIdList(taskids);
         // 创建task对象
         LOG.info("zongzan------taskids:" + ids.toString());
@@ -390,8 +395,10 @@ public class ApplicationMaster {
             tasks.add(TaskTransUtil.getTask(taskJson));
         }
         LOG.info("Get task list from client. task number = " + tasks.size());
-        // 初始化Scheduler对象
+        // 初始化Scheduler对象,设置set相关信息
         schedule = new Schedule(tasks);
+        schedule.initTotalTaskNumOfSet(totalTaskNumOfSet);
+        schedule.initWakeUp(wakeUp);
 
         if (envs.containsKey(DSConstants.JOBSUBMITTERDOMAIN)) {
             domainId = envs.get(DSConstants.JOBSUBMITTERDOMAIN);
@@ -498,19 +505,19 @@ public class ApplicationMaster {
 
         // A resource ask cannot exceed the max.
         // 先不做检验
-    /*if (containerMemory > maxMem) {
-      LOG.info("Container memory specified above max threshold of cluster."
-          + " Using max value." + ", specified=" + containerMemory + ", max="
-          + maxMem);
-      containerMemory = maxMem;
-    }
+        /*if (containerMemory > maxMem) {
+          LOG.info("Container memory specified above max threshold of cluster."
+              + " Using max value." + ", specified=" + containerMemory + ", max="
+              + maxMem);
+          containerMemory = maxMem;
+        }
 
-    if (containerVirtualCores > maxVCores) {
-      LOG.info("Container virtual cores specified above max threshold of cluster."
-          + " Using max value." + ", specified=" + containerVirtualCores + ", max="
-          + maxVCores);
-      containerVirtualCores = maxVCores;
-    }*/
+        if (containerVirtualCores > maxVCores) {
+          LOG.info("Container virtual cores specified above max threshold of cluster."
+              + " Using max value." + ", specified=" + containerVirtualCores + ", max="
+              + maxVCores);
+          containerVirtualCores = maxVCores;
+        }*/
 
         // 向RM请求Container
         List<Container> previousAMRunningContainers =
@@ -525,10 +532,14 @@ public class ApplicationMaster {
         // 循环向RM请求Container，直到所有所需的资源全部被请求到
         // 并循环启动所有的Container并执行程序，执行结果（success/failure）并不关心
 
-        for (int i = 0; i < tasks.size(); ++i) {
+        /*for (int i = 0; i < tasks.size(); ++i) {
             ContainerRequest containerAsk = setupContainerAskForRM(tasks.get(i));
             amRMClient.addContainerRequest(containerAsk);
-        }
+        }*/
+
+        SchedulerThread schedulerThread = new SchedulerThread(tasks);
+        schedulerThread.run();
+
         numRequestedContainers.set(numTotalContainers);
     }
 
@@ -579,9 +590,6 @@ public class ApplicationMaster {
                     DSEvent.DS_APP_ATTEMPT_END, domainId, appSubmitterUgi);
         }
 
-        // Join all launched threads
-        // needed for when we time out
-        // and we need to release containers
         //阻塞调用launchThread.join()方法的线程，直到launchTread完成，此线程再继续
         //由并行执行变成了顺序执行
         //通常用在主线程中，等待其他线程完成再结束主线程
@@ -595,13 +603,10 @@ public class ApplicationMaster {
             }
         }
 
-
-        // When the application completes, it should stop all running containers
+        // 结束container，向RM发送通知
         LOG.info("Application completed. Stopping running containers");
         nmClientAsync.stop();
 
-        // When the application completes, it should send a finish application
-        // signal to the RM
         LOG.info("Application completed. Signalling finish to RM");
 
         FinalApplicationStatus appStatus;
@@ -638,12 +643,12 @@ public class ApplicationMaster {
 
     //container中的处理都是在这里编写的，由RM回调
     private class RMCallbackHandler implements AMRMClientAsync.CallbackHandler {
+
         @SuppressWarnings("unchecked")
         @Override
         public void onContainersCompleted(List<ContainerStatus> completedContainers) {
-            LOG.info("Got response from RM for container ask, completedCnt="
+            LOG.info("onContainersCompleted:Got response from RM for container ask, completedCnt="
                     + completedContainers.size());
-            List<String> ctnIds = new ArrayList<String>();
             for (ContainerStatus containerStatus : completedContainers) {
                 LOG.info(appAttemptID + " got container status for containerID="
                         + containerStatus.getContainerId() + ", state="
@@ -651,7 +656,40 @@ public class ApplicationMaster {
                         + containerStatus.getExitStatus() + ", diagnostics="
                         + containerStatus.getDiagnostics());
 
-                ctnIds.add(containerStatus.getContainerId().toString());
+                // 增加计数
+                String taskid = ctMap.get(containerStatus.getContainerId().toString());
+                Task task = TaskTransUtil.getTaskById(taskid, tasks);
+                LOG.info("Completed task id = " + taskid);
+                if(task != null){
+                    int seq = task.getExecSequence();
+                    String setid = schedule.getSetIdByTask(seq);
+                    int preNum = 0;
+                    if(cmpltTaskNumOfSet.get(setid) == null){
+                        cmpltTaskNumOfSet.put(setid, 0);
+                    }
+                    preNum = cmpltTaskNumOfSet.get(setid);
+                    cmpltTaskNumOfSet.put(setid, ++preNum);
+
+
+                    LOG.info("\n\n----zongzan----\n" +
+                            "taskid=" + taskid +
+                            "sequence=" + seq +
+                            "has complete num=" + preNum +
+                            "total num=" + totalTaskNumOfSet.get(setid));
+                    //唤醒
+                    synchronized (wakeUp.get(setid)) {
+                        if (preNum == totalTaskNumOfSet.get(setid)){
+                            wakeUp.get(setid).notify();
+                            LOG.info("Wake up the scheduler thread");
+                        }
+                    }
+
+                }
+                else{
+                    LOG.info("\n\n----zongzan\n" +
+                            "error.TaskTransUtil.getTaskById Null Pointer.");
+                }
+
                 // non complete containers should not be here
                 assert (containerStatus.getState() == ContainerState.COMPLETE);
 
@@ -660,20 +698,16 @@ public class ApplicationMaster {
                 if (0 != exitStatus) {
                     // container failed
                     if (ContainerExitStatus.ABORTED != exitStatus) {
-                        // shell script failed
-                        // counts as completed
+
                         numCompletedContainers.incrementAndGet();
                         numFailedContainers.incrementAndGet();
                     } else {
-                        // container was killed by framework, possibly preempted
-                        // we should re-try as the container was lost for some reason
+                        // container被kill，RM会把资源释放掉
                         numAllocatedContainers.decrementAndGet();
                         numRequestedContainers.decrementAndGet();
-                        // we do not need to release the container as it would be done
-                        // by the RM
+
                     }
                 } else {
-                    // nothing to do
                     // container completed successfully
                     numCompletedContainers.incrementAndGet();
                     LOG.info("Container completed successfully." + ", containerId="
@@ -683,25 +717,24 @@ public class ApplicationMaster {
                     publishContainerEndEvent(
                             timelineClient, containerStatus, domainId, appSubmitterUgi);
                 }
+
             }
-            // 添加到执行完的集合
-            schedule.addCompletedContainers(ctnIds);
 
-            // Container执行失败，重新申请执行该task
-     /* int askCount = numTotalContainers - numRequestedContainers.get();
-      numRequestedContainers.addAndGet(askCount);
+                // Container执行失败，重新申请执行该task
+                 /* int askCount = numTotalContainers - numRequestedContainers.get();
+                  numRequestedContainers.addAndGet(askCount);
 
-      if (askCount > 0) {
-        for (int i = 0; i < askCount; ++i) {
-          ContainerRequest containerAsk = setupContainerAskForRM();
-          amRMClient.addContainerRequest(containerAsk);
-        }
-      }
+                  if (askCount > 0) {
+                    for (int i = 0; i < askCount; ++i) {
+                      ContainerRequest containerAsk = setupContainerAskForRM();
+                      amRMClient.addContainerRequest(containerAsk);
+                    }
+                  }
 
-      if (numCompletedContainers.get() == numTotalContainers) {
-        done = true;
-      }*/
-        }
+                  if (numCompletedContainers.get() == numTotalContainers) {
+                    done = true;
+                  }*/
+                    }
 
         @Override
         public void onContainersAllocated(List<Container> allocatedContainers) {
@@ -711,7 +744,7 @@ public class ApplicationMaster {
                     + allocatedContainers.size());
             numAllocatedContainers.addAndGet(allocatedContainers.size());
             for (Container allocatedContainer : allocatedContainers) {
-                LOG.info("Allocated a new container and add it to pool"
+                LOG.info("Allocated a new container and run a new task in queue"
                         + ", containerId=" + allocatedContainer.getId()
                         + ", containerNode=" + allocatedContainer.getNodeId().getHost()
                         + ":" + allocatedContainer.getNodeId().getPort()
@@ -722,12 +755,20 @@ public class ApplicationMaster {
                         + allocatedContainer.getResource().getVirtualCores()
                         + ", containerToken"
                         + allocatedContainer.getContainerToken().getIdentifier().toString());
-            }
 
-            //此处线程同步
-           // synchronized (schedule.containersPool) {
-                schedule.addNewContainerToPool(allocatedContainers);
-           // }
+                // 从队列里取一个task,并从中删除
+                Task t = taskQueue.poll();
+                LaunchContainerRunnable runnableLaunchContainer =
+                        new LaunchContainerRunnable(allocatedContainer, containerListener, t);
+                Thread launchThread = new Thread(runnableLaunchContainer);
+                launchThreads.add(launchThread);
+                launchThread.start();
+                // containerid -- taskid
+                ctMap.put(allocatedContainer.getId().toString(), t.getTaskId());
+                LOG.info("Get a task from TaskQueue, launch Running thread. contaienrid = "
+                        + allocatedContainer.getId().toString() + "<-->taskid = "
+                        + t.getTaskId());
+            }
         }
 
         @Override
@@ -764,51 +805,63 @@ public class ApplicationMaster {
      *  应该按照一定的规则分配container，待实现
      *  现在的启动时无序的、平等的
      */
-    private class ScheduleThread implements Runnable {
+    private class SchedulerThread implements Runnable {
+        // 每个job都有一个单独的scheduler线程
+        Schedule schedule = null;
+        List<Task> tasks = null;
 
-        public ScheduleThread() {
+        public SchedulerThread(List<Task> tasks) {
+            this.tasks = tasks;
+            schedule = new Schedule(tasks);
+
         }
         @Override
         public void run() {
-            Set<String> tobeExecTasks = null;
-            int containerPoolSize = 0;
-            while(){
-                tobeExecTasks = schedule.getToBeExecutedTasks();
-                containerPoolSize = schedule.getContainersPoolSize();
-                if(tobeExecTasks.size() == containerPoolSize){
-                    // 全部启动
-                   for(String id : tobeExecTasks){
-                       Task t = TaskTransUtil.getTaskById(id, tasks);
-                       Container container = schedule.getContainerFromPool();
-                       runLaunchContainerThread(container, containerListener, t);
-                       schedule.removeContainerFromPool(container.getId().toString());
-                       schedule.moveFromReady2Run(t.getTaskId());
-                   }
+            // 提交container申请
+            int i = 0;
+            int taskSetsSize = schedule.taskSetsSize();
+            for( ; i < taskSetsSize; i++){
+                // 每个taskSet执行完后，再申请下一个seq
+                TaskSet taskSet = schedule.getTaskSet(i);
+                Iterator<Task> iterator = taskSet.getSet().iterator();
+                while(iterator.hasNext()) {
+                    Task task = iterator.next();
+                    // 添加到container等待队列，下面三句是否要加锁？
+                    ContainerRequest containerAsk = setupContainerAskForRM(task);
+                    amRMClient.addContainerRequest(containerAsk);
+                    taskQueue.offer(task);
                 }
-                else if (tobeExecTasks.size() < containerPoolSize) {
-                    synchronized (schedule.toBeExecutedTasks) {
+                LOG.info("Run Scheduler Thread, execute tasks in taskset, tasksetid = " + taskSet.getSetId()) ;
+                // 等待这个set运行完，在complete方法中唤醒
+                if (cmpltTaskNumOfSet.get(taskSet.getSetId()) !=
+                        totalTaskNumOfSet.get(taskSet.getSetId())){
+                    synchronized (wakeUp.get(taskSet.getSetId())) {
+                        try {
+                            LOG.info("\n\n------zongzan---\n" +
+                                    "Wait to be completed, TaskSet id=" + taskSet.getSetId());
+                            wakeUp.get(taskSet.getSetId()).wait();
 
+                            LOG.info("\n\n------zongzan---\n" +
+                                    "Wake Up! Come to next seq.");
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                     }
                 }
             }
         }
-        //封装用来启动Container线程
-        public void runLaunchContainerThread(Container container, NMCallbackHandler containerListener, Task task){
-            //启动Container线程
-            LaunchContainerRunnable runnableLaunchContainer =
-                    new LaunchContainerRunnable(container, containerListener, task);
-            Thread launchThread = new Thread(runnableLaunchContainer);
-            launchThreads.add(launchThread);
-            launchThread.start();
-        }
+
+
     }
 
+
     /**
+     *
+     * RM分配好Container资源后之后，在RM的handler中使用回调方法启动该线程运行Container
+     * 该线程是Container的具体的工作
      * Thread to connect to the {@link ContainerManagementProtocol} and launch the container
      * that will execute the shell command.
      */
-    // RM分配好Container资源后之后，在RM的handler中使用回调方法启动该线程运行Container
-    // 该线程是Container的具体的工作
     private class LaunchContainerRunnable implements Runnable {
 
         // Allocated container
@@ -860,7 +913,7 @@ public class ApplicationMaster {
                         new URI(task.getTaskJarLocation()));
             } catch (URISyntaxException e) {
                 LOG.error("Error when trying to use task jar path specified"
-                        + " in env, path=" + taskJarPath, e);
+                        + " in env, path=" + task.getJarPath(), e);
                 numCompletedContainers.incrementAndGet();
                 numFailedContainers.incrementAndGet();
                 return;

@@ -6,4 +6,7 @@ package ict.zongzan.util;
  */
 
 public class JobLoader {
+    public static void main(String[] args){
+        
+    }
 }

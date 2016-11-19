@@ -1,14 +1,14 @@
 package ict.zongzan.scheduler;
 
+import ict.zongzan.util.TaskTransUtil;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.util.hash.Hash;
 import org.apache.hadoop.yarn.api.records.Container;
 
 import java.util.*;
 
 /**
- * 组织成DAG图，通过拓扑排序得到启动顺序
- * 按此循序，如果该task入度变为0，则启动该task
  * Created by Zongzan on 2016/11/16.
  */
 public class Schedule {
@@ -16,7 +16,82 @@ public class Schedule {
     private static final Log LOG = LogFactory.getLog(Schedule.class);
     private List<Task> tasks = null;
 
-    // 待执行的task集合
+    // 这个map元素为taskset，每个set里是每次需要执行的task
+    // 每个set依次执行。
+    Map<Integer, TaskSet> taskSetsMap = new HashMap<Integer, TaskSet>();
+
+    public Schedule(List<Task> tasks) {
+        this.tasks = tasks;
+        // init taskSets
+        for(Task t : tasks){
+            TaskSet tmp = taskSetsMap.get(t.getExecSequence());
+            if(tmp == null){
+                String setid = t.getJobId()+"_"+t.getExecSequence();
+                tmp = new TaskSet(new HashSet<Task>(), setid);
+                tmp.getSet().add(t);
+                taskSetsMap.put(t.getExecSequence(), tmp);
+            }
+            else{
+                tmp.getSet().add(t);
+            }
+        }
+        LOG.info("Schedule init. TaskSets.size()=" + taskSetsMap.size());
+    }
+
+    public TaskSet getTaskSet(Integer execSequence){
+        return taskSetsMap.get(execSequence);
+    }
+
+    public int taskSetsSize(){
+        return taskSetsMap.size();
+    }
+
+    /**
+     * 确定在task在哪个set里，这里用两种方式标识了set
+     * 一个是map里的key，是整型的，也就是seq，方便
+     * 一个是TaskSet对象里面的，是字符串，可以标识多个job的set
+     * @param seq
+     * @return
+     */
+    public String getSetIdByTask(int seq){
+        TaskSet ts = taskSetsMap.get(seq);
+        return ts.getSetId();
+    }
+    // 设置AM中set中task的个数，用来判断是否全部执行完
+    public void initTotalTaskNumOfSet(Map map){
+        int size = taskSetsSize();
+        for(int i = 0; i < size; i++){
+            TaskSet ts = taskSetsMap.get(i);
+            map.put(ts.getSetId(), ts.getSet().size());
+        }
+    }
+
+    /**
+     * 初始化唤醒线程的标记
+     */
+    public void initWakeUp(Map wakeUpMap){
+        int size = taskSetsSize();
+        for(int i = 0; i < size; i++){
+            TaskSet ts = taskSetsMap.get(i);
+            wakeUpMap.put(ts.getSetId(), ts);
+        }
+    }
+
+
+    public static void main(String[] args) {
+        Schedule s = new Schedule(TaskTransUtil.jobFactory().getTasks());
+        System.out.println(s.tasks.size());
+        System.out.println(s.taskSetsMap.size());
+        System.out.println(s.getTaskSet(0).getSetId());
+        System.out.println(s.getTaskSet(0).getSet().iterator().next());
+
+    }
+
+
+
+
+
+   /* // 待执行的task集合
     public  Set<String> toBeExecutedTasks = new HashSet<String>();
     // task in running
     private Set<String> runningTasks = new HashSet<String>();
@@ -72,20 +147,20 @@ public class Schedule {
         }
         return -1;
     }
-    /**
+    *//**
      * 得到当前可以执行的task
      * 每次get时更新toBeExecutedTasks
      * @return
-     */
+     *//*
     public Set<String> getToBeExecutedTasks() {
         updateExecTasks();
         return toBeExecutedTasks;
     }
 
-    /**
+    *//**
      * 在onCompleted方法中调用，将执行完的container添加至集合
      * @param conids
-     */
+     *//*
     public void addCompletedContainers(List<String> conids){
         if(conids != null && !conids.isEmpty()){
             for(String id : conids){
@@ -100,10 +175,10 @@ public class Schedule {
         }
     }
 
-    /**
+    *//**
      * ContainerPool的操作
      * @param allocatedContainers
-     */
+     *//*
     public void addNewContainerToPool(List<Container> allocatedContainers){
         containerCounter += allocatedContainers.size();
         containersPool.addAll(allocatedContainers);
@@ -113,10 +188,10 @@ public class Schedule {
         return containersPool.size();
     }
 
-    /**
+    *//**
      * 该方法直接取Container，还应该重载根据资源选择container的方法，待实现
      * @return
-     */
+     *//*
     public Container getContainerFromPool(){
         if(containersPool.size() > 0){
             Container container = containersPool.get(0);
@@ -143,19 +218,15 @@ public class Schedule {
     }
 
 
-     /*public DAG transToDAG(List<Task> tasks){
+     *//*public DAG transToDAG(List<Task> tasks){
 
-     }*/
+     }*//*
 
-    public Schedule(List<Task> tasks) {
-        this.tasks = tasks;
-    }
-
-    /**
+    *//**
      * task状态静态类
      * 区分task两种状态，运行、结束
-     */
-    /*public static class TaskStatus{
+     *//*
+    *//*public static class TaskStatus{
         public static final String RUNNING = "RUNNING";
         public static final String COMPLETE = "COMPLETE";
     }*/

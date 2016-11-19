@@ -123,6 +123,7 @@ public class Task {
                 ", taskJarTimestamp=" + taskJarTimestamp +
                 ", taskJarLocation='" + taskJarLocation + '\'' +
                 ", nextTask='" + nextTask + '\'' +
+                ", execSequence=" + execSequence +
                 ", priority=" + priority +
                 '}';
     }
@@ -140,7 +141,8 @@ public class Task {
         if (priority != task.priority) return false;
         if (!taskId.equals(task.taskId)) return false;
         if (!jobId.equals(task.jobId)) return false;
-        if (!resourceRequests.equals(task.resourceRequests)) return false;
+        if (resourceRequests != null ? !resourceRequests.equals(task.resourceRequests) : task.resourceRequests != null)
+            return false;
         if (jarPath != null ? !jarPath.equals(task.jarPath) : task.jarPath != null) return false;
         if (taskJarLocation != null ? !taskJarLocation.equals(task.taskJarLocation) : task.taskJarLocation != null)
             return false;
@@ -152,7 +154,7 @@ public class Task {
     public int hashCode() {
         int result = taskId.hashCode();
         result = 31 * result + jobId.hashCode();
-        result = 31 * result + resourceRequests.hashCode();
+        result = 31 * result + (resourceRequests != null ? resourceRequests.hashCode() : 0);
         result = 31 * result + (jarPath != null ? jarPath.hashCode() : 0);
         result = 31 * result + (int) (taskJarLen ^ (taskJarLen >>> 32));
         result = 31 * result + (int) (taskJarTimestamp ^ (taskJarTimestamp >>> 32));
