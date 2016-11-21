@@ -10,6 +10,7 @@ import com.google.gson.Gson;
 import ict.zongzan.scheduler.Job;
 import ict.zongzan.scheduler.Task;
 import ict.zongzan.util.JobLoader;
+import ict.zongzan.util.TaskTransUtil;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -29,6 +30,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.security.Credentials;
+import org.apache.hadoop.security.LdapGroupsMapping;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
@@ -138,6 +140,8 @@ public class Client {
     private Job job = null;
 
     private String jobXml = "";
+    // task的类型，设计支持jar、shellscript、汇编、python脚本
+    private String taskType = "";
 
     //hadoop会将运行的jar包解压，按照一定的目录重新打包成包名如下的jar包
     private static final String appMasterJarPath = "AppMaster.jar";
@@ -156,7 +160,7 @@ public class Client {
         yarnClient = YarnClient.createYarnClient();
         yarnClient.init(conf);
         opts = new Options();
-        opts.addOption("appname", true, "Application Name. Default value - DistributedShell");
+        opts.addOption("appname", true, "Application Name. Default value - JobSubmitter");
         opts.addOption("priority", true, "Application Priority. Default 0");
         opts.addOption("queue", true, "RM Queue in which this application is to be submitted");
         opts.addOption("timeout", true, "Application timeout in milliseconds");
@@ -205,7 +209,7 @@ public class Client {
                         + " can be allocated anywhere, if you don't specify the option,"
                         + " default node_label_expression of queue will be used.");
         opts.addOption("job_xml", true, "The location of job XML.");
-        opts.addOption("run_type", true, "Set what kind of Job you want to run." +
+        opts.addOption("task_type", true, "Set what kind of Job you want to run." +
                         " Java jar(jar), shell script(shellscript)," +
                 " python script(pythonscript), or assembly program(assembly).");
     }
@@ -318,12 +322,13 @@ public class Client {
         containerVirtualCores = Integer.parseInt(cliParser.getOptionValue("container_vcores", "1"));
         numContainers = Integer.parseInt(cliParser.getOptionValue("num_containers", "1"));
 
+        taskType = cliParser.getOptionValue("task_type");
+        // 从配置文件加载job
         jobXml = cliParser.getOptionValue("job_xml");
-        System.out.println("-------zongzan "+jobXml+"----");
         if(jobXml.equals("null")){
             LOG.error("Can't find job XML.");
         }
-
+        LOG.info("Load job from path:" + jobXml);
         job = new JobLoader(jobXml).getJobFromXML();
 
         if (containerMemory < 0 || containerVirtualCores < 0 || numContainers < 1) {
@@ -460,11 +465,6 @@ public class Client {
 
         LOG.info("Copy App Master jar from local filesystem and add to local environment");
         //加载本地资源,存到了hdfs里
-        System.out.println("------conf:"+conf+"-------------");
-        System.out.println("------appMasterJar:"+appMasterJar);
-        System.out.println("------appMasterJarPath"+appMasterJarPath+" mainClass:"+appMasterMainClass);
-        System.out.println("------fs.default.name"+conf.get("fs.default.name"));
-        System.out.println("------fs.defaultFS"+conf.get("fs.defaultFS"));
 
         FileSystem fs = FileSystem.get(conf);
         addToLocalResources(fs, appMasterJar, appMasterJarPath, appId.toString(),
@@ -486,15 +486,37 @@ public class Client {
             hdfsShellScriptTimestamp = shellFileStatus.getModificationTime();
         }*/
 
-        // jar包添加到container
+        // jar包(或其他可执行文件)添加到container
         // 如果不同task的jar相同，则将这些task的jar信息指向同一个hdfs文件
-        Set<String> taskjar = new HashSet<>();
+        Map<String, String> jarPathMap = new HashMap<>();
         for(Task task : job.getTasks()){
-            
+            if(jarPathMap.get(task.getJarPath()) == null) {
+                // 该taskjar需要存到hdfs
+                addRescToContainer(fs, task, appId.toString());
+                jarPathMap.put(task.getJarPath(), task.getTaskId());
+            }
+            else {
+                // 已经存过了，直接从hdfs取
+                String taskId = jarPathMap.get(task.getJarPath());
+                try {
+                    task.setTaskJarLen(TaskTransUtil.
+                            getTaskById(taskId, job.getTasks()).getTaskJarLen());
+                    task.setTaskJarLocation(TaskTransUtil.
+                            getTaskById(taskId, job.getTasks()).getTaskJarLocation());
+                    task.setTaskJarTimestamp(TaskTransUtil.
+                            getTaskById(taskId, job.getTasks()).getTaskJarTimestamp());
+                    LOG.info("Already has jar in contaier. Task id = " + task.getTaskId());
+                } catch (NullPointerException e) {
+                    LOG.error("Don't have task which taskid=" + taskId
+                            + "in tasks.");
+                    e.printStackTrace();
+                }
+            }
         }
+        /*// old
         for(Task task : job.getTasks()){
             addRescToContainer(fs, task, appId.toString());
-        }
+        }*/
 
         // Set the necessary security tokens as needed
         //amContainer.setContainerTokens(containerToken);
@@ -502,23 +524,24 @@ public class Client {
         // 设置AM运行所需的环境变量env
         LOG.info("Set the environment for the application master");
         Map<String, String> env = new HashMap<String, String>();
-        /*System.out.println("----Zongzan:hdfsShellScriptLocation: " + hdfsShellScriptLocation);
-        env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTLOCATION, hdfsShellScriptLocation);
-        env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTTIMESTAMP, Long.toString(hdfsShellScriptTimestamp));
-        env.put(DSConstants.DISTRIBUTEDSHELLSCRIPTLEN, Long.toString(hdfsShellScriptLen));*/
-        //taskjar
+
+        // set tasknum
         env.put(DSConstants.TASKNUM, String.valueOf(job.getTasksNum()));
         StringBuilder ids = new StringBuilder();
+        // set task ids
         for(Task task : job.getTasks())
             ids.append(task.getTaskId() + DSConstants.SPLIT);
         env.put(DSConstants.TASKIDSTRING, ids.toString());
 
-        // 转换成json格式传到AM
+        // set tasks. 转换成json格式传到AM
         Gson gson = new Gson();
         for(Task task : job.getTasks()){
             env.put(task.getTaskId(), gson.toJson(task));
             LOG.info("taskString:" +  gson.toJson(task));
         }
+
+        //set task type
+        env.put(DSConstants.TASKTYPE, taskType);
 
         if (domainId != null && domainId.length() > 0) {
             env.put(DSConstants.JOBSUBMITTERDOMAIN, domainId);

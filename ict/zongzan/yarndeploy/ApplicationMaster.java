@@ -173,6 +173,10 @@ public class ApplicationMaster {
     @VisibleForTesting
     protected AtomicInteger numRequestedContainers = new AtomicInteger();
 
+    // command命令，目前支持java、bash脚本
+    private static enum Command{
+        java, bash
+    }
     // Shell command to be executed
     private String shellCommand = "";
     // Args to be passed to the shell command
@@ -188,14 +192,13 @@ public class ApplicationMaster {
     // File length needed for local resource
     private long shellScriptPathLen = 0;
 
-
+    // tasks
     private List<Task> tasks = new ArrayList<Task>();
+    // task类型，
+    private String taskType = "";
 
     // Timeline domain ID
     private String domainId = null;
-
-    // Hardcoded path to shell script in launch container's local env
-    private static final String ExecShellStringPath = Client.SCRIPT_PATH;
 
     // Hardcoded path to custom log_properties
     private static final String log4jPath = "log4j.properties";
@@ -230,7 +233,7 @@ public class ApplicationMaster {
     // 运行的命令，如果是脚本，则为"bash"
     // 命令跟目录在/bin，会补全为/bin/bash
     // 这里直接运行java -jar，故为java
-    private final String linux_bash_command = "java";
+    private final String linux_bash_command = "bash";
 
     /**
      * @param args Command line args
@@ -383,11 +386,13 @@ public class ApplicationMaster {
         }
         LOG.info("Get task list from client. task number = " + tasks.size());
 
+        // set task type
+        taskType = envs.get(DSConstants.TASKTYPE);
+
         // 初始化Scheduler对象,设置set相关信息
         schedule = new Schedule(tasks);
         schedule.initTotalTaskNumOfSet(totalTaskNumOfSet);
         schedule.initWakeUp(wakeUp);
-
 
         if (envs.containsKey(DSConstants.JOBSUBMITTERDOMAIN)) {
             domainId = envs.get(DSConstants.JOBSUBMITTERDOMAIN);
@@ -653,11 +658,11 @@ public class ApplicationMaster {
                     cmpltTaskNumOfSet.put(setid, ++preNum);
 
 
-                    LOG.info("\n\n----zongzan----\n" +
+                    LOG.info("\n\n----zongzan----" +
                             "taskid=" + taskid +
                             "sequence=" + seq +
                             "has complete num=" + preNum +
-                            "total num=" + totalTaskNumOfSet.get(setid));
+                            "total num=" + totalTaskNumOfSet.get(setid) + "\n");
                     //唤醒
                     synchronized (wakeUp.get(setid)) {
                         if (preNum == totalTaskNumOfSet.get(setid)){
@@ -668,8 +673,8 @@ public class ApplicationMaster {
 
                 }
                 else{
-                    LOG.info("\n\n----zongzan\n" +
-                            "error.TaskTransUtil.getTaskById Null Pointer.");
+                    LOG.info("\n\n----zongzan---" +
+                            "error.TaskTransUtil.getTaskById Null Pointer. + \"\\n\"");
                 }
 
                 // non complete containers should not be here
@@ -819,12 +824,12 @@ public class ApplicationMaster {
                         totalTaskNumOfSet.get(taskSet.getSetId())){
                     synchronized (wakeUp.get(taskSet.getSetId())) {
                         try {
-                            LOG.info("\n\n------zongzan---\n" +
-                                    "Wait to be completed, TaskSet id=" + taskSet.getSetId());
+                            LOG.info("\n\n------zongzan---" +
+                                    "Wait to be completed, TaskSet id=" + taskSet.getSetId() + "\n");
                             wakeUp.get(taskSet.getSetId()).wait();
 
-                            LOG.info("\n\n------zongzan---\n" +
-                                    "Wake Up! Come to next seq.");
+                            LOG.info("\n\n------zongzan---" +
+                                    "Wake Up! Come to next seq.\n");
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
@@ -906,14 +911,25 @@ public class ApplicationMaster {
             localResources.put(TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()), taskJarRsrc);
             // Set the necessary command to execute on the allocated container
             Vector<CharSequence> vargs = new Vector<CharSequence>(5);
+
             // 设置运行命令，不用脚本，改为直接运行命令
-            //vargs.add(shellCommand);
             // Set shell script path
             /*if (!scriptPath.isEmpty()) {
             vargs.add(ExecShellStringPath);
             }*/
-            shellCommand = linux_bash_command;
-            shellArgs = "-jar " + TaskTransUtil.getFileNameByPath(task.getTaskJarLocation());
+            if (taskType.equals("jar")){
+                shellCommand = "java";
+                shellArgs = "-jar " + TaskTransUtil.getFileNameByPath(task.getTaskJarLocation())
+                        + " " + task.getResourceRequests().getScps()
+                        + " " + task.getResourceRequests().getCores();
+            }
+            else if (taskType.equals("shellscript")){
+                shellCommand = "bash";
+            }
+            else {
+                LOG.info("set command error");
+            }
+            //shellCommand = linux_bash_command;
             vargs.add(shellCommand);
             // Set args for the shell command if any
             vargs.add(shellArgs);
