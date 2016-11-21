@@ -3,8 +3,13 @@ package ict.zongzan.master;
 import ict.zongzan.scheduler.Job;
 import ict.zongzan.scheduler.Resource;
 import ict.zongzan.scheduler.Task;
+import ict.zongzan.util.JobLoader;
 import ict.zongzan.util.TaskTransUtil;
 import ict.zongzan.yarndeploy.Client;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -18,15 +23,13 @@ import java.util.List;
 public class Master {
 
     private static final Log LOG = LogFactory.getLog(Master.class);
-    //set job for Client
-    Job job = null;
 
     public static void main(String[] args){
+
         //client result;
         boolean result = false;
         try{
             Client yarnClient = new Client();
-            yarnClient.setJob(TaskTransUtil.jobFactory());
             // 初始化client
             try {
                 boolean doRun = yarnClient.init(args);

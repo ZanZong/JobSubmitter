@@ -206,7 +206,6 @@ public class ApplicationMaster {
     private volatile boolean done;
 
     private ByteBuffer allTokens;
-
     // Launch threads
     private List<Thread> launchThreads = new ArrayList<Thread>();
 
@@ -369,18 +368,6 @@ public class ApplicationMaster {
                 shellEnv.put(key, val);
             }
         }
-        //设置taskjar的env
-       /* taskJarPath = envs.get(DSConstants.TASKJARLOC);
-        taskJarLen = Long.parseLong(envs.get(DSConstants.TASKJARLEN));
-        taskJarTimestamp = Long.parseLong(envs.get(DSConstants.TASKJARTIMESTAMP));
-        if (!scriptPath.isEmpty()
-                && (shellScriptPathTimestamp <= 0 || shellScriptPathLen <= 0)) {
-          LOG.error("Illegal values in env for task jar path" + ", path="
-                  + taskJarPath + ", len=" + taskJarLen + ", timestamp="
-                  + taskJarTimestamp);
-          throw new IllegalArgumentException(
-                  "Illegal values in env for task jar path");
-        }*/
 
         String taskids = envs.get(DSConstants.TASKIDSTRING);
         //根据id得到Json字符串，解析得到Task对象
@@ -395,22 +382,17 @@ public class ApplicationMaster {
             tasks.add(TaskTransUtil.getTask(taskJson));
         }
         LOG.info("Get task list from client. task number = " + tasks.size());
+
         // 初始化Scheduler对象,设置set相关信息
         schedule = new Schedule(tasks);
         schedule.initTotalTaskNumOfSet(totalTaskNumOfSet);
         schedule.initWakeUp(wakeUp);
 
+
         if (envs.containsKey(DSConstants.JOBSUBMITTERDOMAIN)) {
             domainId = envs.get(DSConstants.JOBSUBMITTERDOMAIN);
         }
 
-        //每个task的resource在提交时输入
-        /*containerMemory = Integer.parseInt(cliParser.getOptionValue(
-            "container_memory", "10"));
-        containerVirtualCores = Integer.parseInt(cliParser.getOptionValue(
-            "container_vcores", "1"));
-        numTotalContainers = Integer.parseInt(cliParser.getOptionValue(
-            "num_containers", "1"));*/
         numTotalContainers = tasks.size();
         if (numTotalContainers == 0) {
             throw new IllegalArgumentException(

@@ -4,15 +4,12 @@ package ict.zongzan.yarndeploy;
  */
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Vector;
+import java.util.*;
 
 import com.google.gson.Gson;
 import ict.zongzan.scheduler.Job;
 import ict.zongzan.scheduler.Task;
+import ict.zongzan.util.JobLoader;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -89,12 +86,12 @@ public class Client {
     // Main class to invoke application master
     private final String appMasterMainClass;
 
-    // Shell command to be executed
+    /*// Shell command to be executed
     private String shellCommand = "";
     // Location of shell script
     private String shellScriptPath = "";
     // Args to be passed to the shell command
-    private String[] shellArgs = new String[] {};
+    private String[] shellArgs = new String[] {};*/
     // Env variables to be setup for the shell command
     private Map<String, String> shellEnv = new HashMap<String, String>();
     // Shell Command Container priority
@@ -108,9 +105,6 @@ public class Client {
     private int numContainers = 1;
     private String nodeLabelExpression = null;
 
-    // log4j.properties file
-    // if available, add to local resources and set into classpath
-    private String log4jPropFile = "";
 
     // Start time for client
     private final long clientStartTime = System.currentTimeMillis();
@@ -143,7 +137,9 @@ public class Client {
     //提交job
     private Job job = null;
 
-    //hadoop会将你运行的jar包解压，按照一定的目录重新打包成包名如下的jar包
+    private String jobXml = "";
+
+    //hadoop会将运行的jar包解压，按照一定的目录重新打包成包名如下的jar包
     private static final String appMasterJarPath = "AppMaster.jar";
 
     public static final String SCRIPT_PATH = "ExecScript.sh";
@@ -208,6 +204,10 @@ public class Client {
                         + " will be allocated, \"\" means containers"
                         + " can be allocated anywhere, if you don't specify the option,"
                         + " default node_label_expression of queue will be used.");
+        opts.addOption("job_xml", true, "The location of job XML.");
+        opts.addOption("run_type", true, "Set what kind of Job you want to run." +
+                        " Java jar(jar), shell script(shellscript)," +
+                " python script(pythonscript), or assembly program(assembly).");
     }
 
     /**
@@ -237,14 +237,14 @@ public class Client {
             throw new IllegalArgumentException("No args specified for client to initialize");
         }
 
-        if (cliParser.hasOption("log_properties")) {
+        /*if (cliParser.hasOption("log_properties")) {
             String log4jPath = cliParser.getOptionValue("log_properties");
             try {
                 Log4jPropertyHelper.updateLog4jConfiguration(Client.class, log4jPath);
             } catch (Exception e) {
                 LOG.warn("Can not set up custom log4j properties. " + e);
             }
-        }
+        }*/
 
         if (cliParser.hasOption("help")) {
             printUsage();
@@ -263,7 +263,7 @@ public class Client {
         appName = cliParser.getOptionValue("appname", "JobSubmitter");
         amPriority = Integer.parseInt(cliParser.getOptionValue("priority", "0"));
         amQueue = cliParser.getOptionValue("queue", "default");
-        amMemory = Integer.parseInt(cliParser.getOptionValue("master_memory", "10"));
+        amMemory = Integer.parseInt(cliParser.getOptionValue("master_memory", "1024"));
         amVCores = Integer.parseInt(cliParser.getOptionValue("master_vcores", "1"));
 
         if (amMemory < 0) {
@@ -281,7 +281,7 @@ public class Client {
         //master的jar包本地路径是通过参数传进来的
         appMasterJar = cliParser.getOptionValue("jar");
 
-        if (!cliParser.hasOption("shell_command") && !cliParser.hasOption("shell_script")) {
+        /*if (!cliParser.hasOption("shell_command") && !cliParser.hasOption("shell_script")) {
             throw new IllegalArgumentException(
                     "No shell command or shell script specified to be executed by application master");
         } else if (cliParser.hasOption("shell_command") && cliParser.hasOption("shell_script")) {
@@ -294,7 +294,7 @@ public class Client {
         }
         if (cliParser.hasOption("shell_args")) {
             shellArgs = cliParser.getOptionValues("shell_args");
-        }
+        }*/
 
         if (cliParser.hasOption("shell_env")) {
             String envs[] = cliParser.getOptionValues("shell_env");
@@ -318,6 +318,13 @@ public class Client {
         containerVirtualCores = Integer.parseInt(cliParser.getOptionValue("container_vcores", "1"));
         numContainers = Integer.parseInt(cliParser.getOptionValue("num_containers", "1"));
 
+        jobXml = cliParser.getOptionValue("job_xml");
+        System.out.println("-------zongzan "+jobXml+"----");
+        if(jobXml.equals("null")){
+            LOG.error("Can't find job XML.");
+        }
+
+        job = new JobLoader(jobXml).getJobFromXML();
 
         if (containerMemory < 0 || containerVirtualCores < 0 || numContainers < 1) {
             throw new IllegalArgumentException("Invalid no. of containers or container memory/vcores specified,"
@@ -335,7 +342,7 @@ public class Client {
                 Long.parseLong(cliParser.getOptionValue(
                         "attempt_failures_validity_interval", "-1"));
 
-        log4jPropFile = cliParser.getOptionValue("log_properties", "");
+        //log4jPropFile = cliParser.getOptionValue("log_properties", "");
 
         // Get timeline domain options
         if (cliParser.hasOption("domain")) {
@@ -480,6 +487,11 @@ public class Client {
         }*/
 
         // jar包添加到container
+        // 如果不同task的jar相同，则将这些task的jar信息指向同一个hdfs文件
+        Set<String> taskjar = new HashSet<>();
+        for(Task task : job.getTasks()){
+            
+        }
         for(Task task : job.getTasks()){
             addRescToContainer(fs, task, appId.toString());
         }
@@ -521,8 +533,8 @@ public class Client {
             classPathEnv.append(ApplicationConstants.CLASS_PATH_SEPARATOR);
             classPathEnv.append(c.trim());
         }
-        classPathEnv.append(ApplicationConstants.CLASS_PATH_SEPARATOR).append(
-                "./log4j.properties");
+        /*classPathEnv.append(ApplicationConstants.CLASS_PATH_SEPARATOR).append(
+                "./log4j.properties");*/
 
         // add the runtime classpath needed for tests to work
         if (conf.getBoolean(YarnConfiguration.IS_MINI_YARN_CLUSTER, false)) {
@@ -543,9 +555,9 @@ public class Client {
         // Set class name
         vargs.add(appMasterMainClass);
         // Set params for Application Master
-        vargs.add("--container_memory " + String.valueOf(containerMemory));
+        /*vargs.add("--container_memory " + String.valueOf(containerMemory));
         vargs.add("--container_vcores " + String.valueOf(containerVirtualCores));
-        vargs.add("--num_containers " + String.valueOf(numContainers));
+        vargs.add("--num_containers " + String.valueOf(numContainers));*/
             if (null != nodeLabelExpression) {
             appContext.setNodeLabelExpression(nodeLabelExpression);
         }
@@ -586,10 +598,6 @@ public class Client {
         Resource capability = Resource.newInstance(amMemory, amVCores);
         appContext.setResource(capability);
 
-        // Service data is a binary blob that can be passed to the application
-        // Not needed in this scenario
-        // amContainer.setServiceData(serviceData);
-
         // Setup security tokens
         if (UserGroupInformation.isSecurityEnabled()) {
             // Note: Credentials class is marked as LimitedPrivate for HDFS and MapReduce
@@ -601,12 +609,17 @@ public class Client {
             }
 
             // For now, only getting tokens for the default file-system.
-            final Token<?> tokens[] =
-                    fs.addDelegationTokens(tokenRenewer, credentials);
-            if (tokens != null) {
-                for (Token<?> token : tokens) {
-                    LOG.info("Got dt for " + fs.getUri() + "; " + token);
+            try{
+                final Token<?> tokens[] =
+                        fs.addDelegationTokens(tokenRenewer, credentials);
+                if (tokens != null) {
+                    for (Token<?> token : tokens) {
+                        LOG.info("Got dt for " + fs.getUri() + "; " + token);
+                    }
                 }
+
+            } catch (Exception e){
+                LOG.warn("Set tokens.For now, only getting tokens for the default file-system.");
             }
             DataOutputBuffer dob = new DataOutputBuffer();
             credentials.writeTokenStorageToStream(dob);
@@ -624,10 +637,6 @@ public class Client {
         // Set the queue to which this application is to be submitted in the RM
         appContext.setQueue(amQueue);
 
-        // Submit the application to the applications manager
-        // SubmitApplicationResponse submitResp = applicationsManager.submitApplication(appRequest);
-        // Ignore the response as either a valid response object is returned on success
-        // or an exception thrown to denote some form of a failure
         LOG.info("Submitting application to ASM");
 
         //提交application到RM的applications manager
@@ -784,15 +793,6 @@ public class Client {
             LOG.error("Error when putting the timeline domain", e);
         } finally {
             timelineClient.stop();
-        }
-    }
-
-    public void setJob(Job job){
-        if(job != null){
-            this.job = job;
-        }
-        else{
-            LOG.error("Error, Job is null.");
         }
     }
 
