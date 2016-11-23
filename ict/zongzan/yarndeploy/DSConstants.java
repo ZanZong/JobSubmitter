@@ -41,6 +41,14 @@ public class DSConstants {
     //分号当字符串分隔符
     public static final String SPLIT = ";";
 
+    // Job
+    public static final String JOBNUM = "JOBNUM";
+    public static final String JOBIDSTRING = "JOBSIDSTRING";
+
+
+    // job成员变量
+    public static final String JOBTASKS = "tasks";
+    public static final String JOBNAME = "jobName";
     //Task类的成员变量名称，用来解析Json
     public static final String RESOURCEREQUESTS = "resourceRequests";
     public static final String TASKID = "taskId";

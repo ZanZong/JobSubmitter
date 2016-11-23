@@ -35,6 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import ict.zongzan.calculate.IbsCProgram;
+import ict.zongzan.scheduler.Job;
 import ict.zongzan.scheduler.Schedule;
 import ict.zongzan.scheduler.Task;
 import ict.zongzan.scheduler.TaskSet;
@@ -173,10 +175,6 @@ public class ApplicationMaster {
     @VisibleForTesting
     protected AtomicInteger numRequestedContainers = new AtomicInteger();
 
-    // command命令，目前支持java、bash脚本
-    private static enum Command{
-        java, bash
-    }
     // Shell command to be executed
     private String shellCommand = "";
     // Args to be passed to the shell command
@@ -192,8 +190,10 @@ public class ApplicationMaster {
     // File length needed for local resource
     private long shellScriptPathLen = 0;
 
+    //jobs
+    private List<Job> jobs = new ArrayList();
     // tasks
-    private List<Task> tasks = new ArrayList<Task>();
+    private Map<String, List<Task>> tasksMap = new HashMap<>();
     // task类型，
     private String taskType = "";
 
@@ -211,9 +211,10 @@ public class ApplicationMaster {
     private ByteBuffer allTokens;
     // Launch threads
     private List<Thread> launchThreads = new ArrayList<Thread>();
+    List<SchedulerThread> schedulerThreads = new ArrayList<>();
 
     //scheduler
-    Schedule schedule;
+    Map<String, Schedule> scheduleMap = new HashMap<>();
     // container等待队列
     Queue<Task> taskQueue = new LinkedList<Task>();
     //Map: alloc containerid --> taskid
@@ -372,39 +373,42 @@ public class ApplicationMaster {
             }
         }
 
-        String taskids = envs.get(DSConstants.TASKIDSTRING);
+        String jobids = envs.get(DSConstants.JOBIDSTRING);
         //根据id得到Json字符串，解析得到Task对象
         //Gson gson = new Gson();
         //JsonParser parser = new JsonParser();
-        List<String> ids = TaskTransUtil.getIdList(taskids);
-        // 创建task对象
-        LOG.info("zongzan------taskids:" + ids.toString());
+        List<String> ids = TaskTransUtil.getIdList(jobids);
+        // 创建job对象
+        LOG.info("zongzan------jobids:" + ids.toString());
         for (String id : ids) {
-            String taskJson = envs.get(id);
-            LOG.info("taskid=" + id + " taskJson:" + taskJson);
-            tasks.add(TaskTransUtil.getTask(taskJson));
+            String jobJson = envs.get(id);
+            LOG.info("jobid=" + id + " taskJson:" + jobJson);
+            jobs.add(TaskTransUtil.getJob(jobJson));
         }
-        LOG.info("Get task list from client. task number = " + tasks.size());
+        LOG.info("Get job list from client. job number = " + jobs.size());
+
+        // 初始化Scheduler对象,设置set相关信息
+        for(Job job : jobs){
+            Schedule schedule = new Schedule(job.getTasks());
+            schedule.initTotalTaskNumOfSet(totalTaskNumOfSet);
+            schedule.initWakeUp(wakeUp);
+            scheduleMap.put(job.getJobId(), schedule);
+            // container总数为task总数
+            numTotalContainers += job.getTasks().size();
+        }
 
         // set task type
         taskType = envs.get(DSConstants.TASKTYPE);
-
-        // 初始化Scheduler对象,设置set相关信息
-        schedule = new Schedule(tasks);
-        schedule.initTotalTaskNumOfSet(totalTaskNumOfSet);
-        schedule.initWakeUp(wakeUp);
-
+        LOG.info("TaskType = " + taskType);
         if (envs.containsKey(DSConstants.JOBSUBMITTERDOMAIN)) {
             domainId = envs.get(DSConstants.JOBSUBMITTERDOMAIN);
         }
 
-        numTotalContainers = tasks.size();
         if (numTotalContainers == 0) {
             throw new IllegalArgumentException(
                     "Cannot run task with no containers. Total containers number is 0");
         }
-        requestPriority = Integer.parseInt(cliParser
-                .getOptionValue("priority", "0"));
+
         return true;
     }
 
@@ -524,8 +528,12 @@ public class ApplicationMaster {
             amRMClient.addContainerRequest(containerAsk);
         }*/
 
-        SchedulerThread schedulerThread = new SchedulerThread(tasks);
-        schedulerThread.run();
+
+        for(Job job : jobs){
+            SchedulerThread schedulerThread = new SchedulerThread(job.getTasks());
+            schedulerThread.run();
+            schedulerThreads.add(schedulerThread);
+        }
 
         numRequestedContainers.set(numTotalContainers);
     }
@@ -644,12 +652,15 @@ public class ApplicationMaster {
                         + containerStatus.getDiagnostics());
 
                 // 增加计数
-                String taskid = ctMap.get(containerStatus.getContainerId().toString());
-                Task task = TaskTransUtil.getTaskById(taskid, tasks);
-                LOG.info("Completed task id = " + taskid);
+                String tag = ctMap.get(containerStatus.getContainerId().toString());
+                String taskid = tag.split("_")[1];
+                String jobid = tag.split("_")[0];
+                Task task = TaskTransUtil.getTaskById(taskid, tasksMap.get(jobid));
+                LOG.info(tag + "Completed task id = " + taskid + ", jobid = " + jobid
+                            + "<=====>Container id =" + containerStatus.getContainerId().toString());
                 if(task != null){
                     int seq = task.getExecSequence();
-                    String setid = schedule.getSetIdByTask(seq);
+                    String setid = scheduleMap.get(jobid).getSetIdByTask(seq);
                     int preNum = 0;
                     if(cmpltTaskNumOfSet.get(setid) == null){
                         cmpltTaskNumOfSet.put(setid, 0);
@@ -676,13 +687,14 @@ public class ApplicationMaster {
                     LOG.info("\n\n----zongzan---" +
                             "error.TaskTransUtil.getTaskById Null Pointer. + \"\\n\"");
                 }
-
                 // non complete containers should not be here
-                assert (containerStatus.getState() == ContainerState.COMPLETE);
+                /*assert (containerStatus.getState() == ContainerState.COMPLETE);
 
                 // increment counters for completed/failed containers
                 int exitStatus = containerStatus.getExitStatus();
-                if (0 != exitStatus) {
+                // 执行c的时候有问题，会有exitstatus = 16，但执行结果是正确的
+                // 先做一下处理，让application正常结束
+                if (0 != exitStatus && exitStatus != 16) {
                     // container failed
                     if (ContainerExitStatus.ABORTED != exitStatus) {
 
@@ -694,12 +706,13 @@ public class ApplicationMaster {
                         numRequestedContainers.decrementAndGet();
 
                     }
-                } else {
+                } else {*/
                     // container completed successfully
                     numCompletedContainers.incrementAndGet();
+
                     LOG.info("Container completed successfully." + ", containerId="
                             + containerStatus.getContainerId());
-                }
+               // }
                 if (timelineClient != null) {
                     publishContainerEndEvent(
                             timelineClient, containerStatus, domainId, appSubmitterUgi);
@@ -721,7 +734,7 @@ public class ApplicationMaster {
                   if (numCompletedContainers.get() == numTotalContainers) {
                     done = true;
                   }*/
-                    }
+        }
 
         @Override
         public void onContainersAllocated(List<Container> allocatedContainers) {
@@ -751,10 +764,11 @@ public class ApplicationMaster {
                 launchThreads.add(launchThread);
                 launchThread.start();
                 // containerid -- taskid
-                ctMap.put(allocatedContainer.getId().toString(), t.getTaskId());
-                LOG.info("Get a task from TaskQueue, launch Running thread. contaienrid = "
-                        + allocatedContainer.getId().toString() + "<-->taskid = "
-                        + t.getTaskId());
+                String val = t.getJobId() + "_" + t.getTaskId();
+                ctMap.put(allocatedContainer.getId().toString(), val);
+                LOG.info("\n\nGet a task from TaskQueue, launch Running thread. contaienrid = "
+                        + allocatedContainer.getId().toString() + "<--->task tag = "
+                        + val);
             }
         }
 
@@ -802,6 +816,7 @@ public class ApplicationMaster {
             schedule = new Schedule(tasks);
 
         }
+
         @Override
         public void run() {
             // 提交container申请
@@ -818,7 +833,7 @@ public class ApplicationMaster {
                     amRMClient.addContainerRequest(containerAsk);
                     taskQueue.offer(task);
                 }
-                LOG.info("Run Scheduler Thread, execute tasks in taskset, tasksetid = " + taskSet.getSetId()) ;
+                LOG.info("Run Scheduler Thread, execute tasks in taskset, tasksetid = " + taskSet.getSetId());
                 // 等待这个set运行完，在complete方法中唤醒
                 if (cmpltTaskNumOfSet.get(taskSet.getSetId()) !=
                         totalTaskNumOfSet.get(taskSet.getSetId())){
@@ -926,9 +941,12 @@ public class ApplicationMaster {
             else if (taskType.equals("shellscript")){
                 shellCommand = "bash";
             }
-            else {
-                LOG.info("set command error");
+            else if (taskType.equals("c-program")){
+                shellCommand = "./" + TaskTransUtil.getFileNameByPath(task.getTaskJarLocation());
+                shellArgs = IbsCProgram.getLoops(task.getResourceRequests().getScps(),
+                                    task.getResourceRequests().getCores());
             }
+
             //shellCommand = linux_bash_command;
             vargs.add(shellCommand);
             // Set args for the shell command if any

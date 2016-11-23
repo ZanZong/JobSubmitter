@@ -137,7 +137,7 @@ public class Client {
     private Options opts;
 
     //提交job
-    private Job job = null;
+    private List<Job> jobs = null;
 
     private String jobXml = "";
     // task的类型，设计支持jar、shellscript、汇编、python脚本
@@ -211,7 +211,7 @@ public class Client {
         opts.addOption("job_xml", true, "The location of job XML.");
         opts.addOption("task_type", true, "Set what kind of Job you want to run." +
                         " Java jar(jar), shell script(shellscript)," +
-                " python script(pythonscript), or assembly program(assembly).");
+                " c program(c-program), or assembly program(assembly).");
     }
 
     /**
@@ -329,7 +329,7 @@ public class Client {
             LOG.error("Can't find job XML.");
         }
         LOG.info("Load job from path:" + jobXml);
-        job = new JobLoader(jobXml).getJobFromXML();
+        jobs = new JobLoader(jobXml).getJobFromXML();
 
         if (containerMemory < 0 || containerVirtualCores < 0 || numContainers < 1) {
             throw new IllegalArgumentException("Invalid no. of containers or container memory/vcores specified,"
@@ -489,30 +489,33 @@ public class Client {
         // jar包(或其他可执行文件)添加到container
         // 如果不同task的jar相同，则将这些task的jar信息指向同一个hdfs文件
         Map<String, String> jarPathMap = new HashMap<>();
-        for(Task task : job.getTasks()){
-            if(jarPathMap.get(task.getJarPath()) == null) {
-                // 该taskjar需要存到hdfs
-                addRescToContainer(fs, task, appId.toString());
-                jarPathMap.put(task.getJarPath(), task.getTaskId());
-            }
-            else {
-                // 已经存过了，直接从hdfs取
-                String taskId = jarPathMap.get(task.getJarPath());
-                try {
-                    task.setTaskJarLen(TaskTransUtil.
-                            getTaskById(taskId, job.getTasks()).getTaskJarLen());
-                    task.setTaskJarLocation(TaskTransUtil.
-                            getTaskById(taskId, job.getTasks()).getTaskJarLocation());
-                    task.setTaskJarTimestamp(TaskTransUtil.
-                            getTaskById(taskId, job.getTasks()).getTaskJarTimestamp());
-                    LOG.info("Already has jar in contaier. Task id = " + task.getTaskId());
-                } catch (NullPointerException e) {
-                    LOG.error("Don't have task which taskid=" + taskId
-                            + "in tasks.");
-                    e.printStackTrace();
+        for(Job job : jobs){
+            for(Task task : job.getTasks()){
+                if(jarPathMap.get(task.getJarPath()) == null) {
+                    // 该taskjar需要存到hdfs
+                    addRescToContainer(fs, task, appId.toString());
+                    jarPathMap.put(task.getJarPath(), task.getTaskId());
+                }
+                else {
+                    // 已经存过了，直接从hdfs取
+                    String taskId = jarPathMap.get(task.getJarPath());
+                    try {
+                        task.setTaskJarLen(TaskTransUtil.
+                                getTaskById(taskId, job.getTasks()).getTaskJarLen());
+                        task.setTaskJarLocation(TaskTransUtil.
+                                getTaskById(taskId, job.getTasks()).getTaskJarLocation());
+                        task.setTaskJarTimestamp(TaskTransUtil.
+                                getTaskById(taskId, job.getTasks()).getTaskJarTimestamp());
+                        LOG.info("Already has jar in contaier. Task id = " + task.getTaskId());
+                    } catch (NullPointerException e) {
+                        LOG.error("Don't have task which taskid=" + taskId
+                                + "in tasks.");
+                        e.printStackTrace();
+                    }
                 }
             }
         }
+
         /*// old
         for(Task task : job.getTasks()){
             addRescToContainer(fs, task, appId.toString());
@@ -524,21 +527,19 @@ public class Client {
         // 设置AM运行所需的环境变量env
         LOG.info("Set the environment for the application master");
         Map<String, String> env = new HashMap<String, String>();
-
-        // set tasknum
-        env.put(DSConstants.TASKNUM, String.valueOf(job.getTasksNum()));
-        StringBuilder ids = new StringBuilder();
-        // set task ids
-        for(Task task : job.getTasks())
-            ids.append(task.getTaskId() + DSConstants.SPLIT);
-        env.put(DSConstants.TASKIDSTRING, ids.toString());
-
-        // set tasks. 转换成json格式传到AM
-        Gson gson = new Gson();
-        for(Task task : job.getTasks()){
-            env.put(task.getTaskId(), gson.toJson(task));
-            LOG.info("taskString:" +  gson.toJson(task));
+        //set jobs
+       // env.put(DSConstants.JOBNUM, String.valueOf(jobs.size()));
+        StringBuilder sb = new StringBuilder();
+        for(Job job : jobs){
+            sb.append(job.getJobId() + DSConstants.SPLIT);
         }
+        env.put(DSConstants.JOBIDSTRING, sb.toString());
+        Gson gson = new Gson();
+        for(Job job : jobs){
+            env.put(job.getJobId(), gson.toJson(job));
+            LOG.info("Transtion Job, jobId=" + job.getJobId());
+        }
+
 
         //set task type
         env.put(DSConstants.TASKTYPE, taskType);
