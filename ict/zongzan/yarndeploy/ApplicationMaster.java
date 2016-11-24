@@ -101,6 +101,7 @@ import org.apache.hadoop.yarn.util.SystemClock;
 import org.apache.log4j.LogManager;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.log4j.helpers.LogLog;
 
 
 @InterfaceAudience.Public
@@ -211,7 +212,7 @@ public class ApplicationMaster {
     private ByteBuffer allTokens;
     // Launch threads
     private List<Thread> launchThreads = new ArrayList<Thread>();
-    List<SchedulerThread> schedulerThreads = new ArrayList<>();
+    private List<Thread> schedulerThreads = new ArrayList<>();
 
     //scheduler
     Map<String, Schedule> scheduleMap = new HashMap<>();
@@ -395,6 +396,8 @@ public class ApplicationMaster {
             scheduleMap.put(job.getJobId(), schedule);
             // container总数为task总数
             numTotalContainers += job.getTasks().size();
+            // 设置jobid和tasklist的映射
+            tasksMap.put(job.getJobId(), job.getTasks());
         }
 
         // set task type
@@ -528,13 +531,14 @@ public class ApplicationMaster {
             amRMClient.addContainerRequest(containerAsk);
         }*/
 
-
         for(Job job : jobs){
+            LOG.info("\n\n----zongzan--Launch job scheduler thread:jobid=" + job.getJobId()
+                    + ", JobList Size=" + jobs.size());
             SchedulerThread schedulerThread = new SchedulerThread(job.getTasks());
-            schedulerThread.run();
-            schedulerThreads.add(schedulerThread);
+            Thread st = new Thread(schedulerThread);
+            st.start();
+            schedulerThreads.add(st);
         }
-
         numRequestedContainers.set(numTotalContainers);
     }
 
@@ -591,9 +595,17 @@ public class ApplicationMaster {
         //这里是等待10s
         for (Thread launchThread : launchThreads) {
             try {
-                launchThread.join(10000);
+                launchThread.join(50000);
             } catch (InterruptedException e) {
-                LOG.info("Exception thrown in thread join: " + e.getMessage());
+                LOG.info("Exception thrown in launchthread join: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+        for(Thread st : schedulerThreads) {
+            try {
+                st.join();
+            } catch (InterruptedException e) {
+                LOG.info("Exception thrown in schedulerthread join: " + e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -649,15 +661,14 @@ public class ApplicationMaster {
                         + containerStatus.getContainerId() + ", state="
                         + containerStatus.getState() + ", exitStatus="
                         + containerStatus.getExitStatus() + ", diagnostics="
-                        + containerStatus.getDiagnostics());
-
+                       /* + containerStatus.getDiagnostics()*/);
                 // 增加计数
                 String tag = ctMap.get(containerStatus.getContainerId().toString());
                 String taskid = tag.split("_")[1];
                 String jobid = tag.split("_")[0];
                 Task task = TaskTransUtil.getTaskById(taskid, tasksMap.get(jobid));
-                LOG.info(tag + "Completed task id = " + taskid + ", jobid = " + jobid
-                            + "<=====>Container id =" + containerStatus.getContainerId().toString());
+                LOG.info(tag + " Completed task id = " + taskid + ", jobid = " + jobid
+                            + " <=====> Container id = " + containerStatus.getContainerId().toString());
                 if(task != null){
                     int seq = task.getExecSequence();
                     String setid = scheduleMap.get(jobid).getSetIdByTask(seq);
@@ -670,10 +681,10 @@ public class ApplicationMaster {
 
 
                     LOG.info("\n\n----zongzan----" +
-                            "taskid=" + taskid +
-                            "sequence=" + seq +
-                            "has complete num=" + preNum +
-                            "total num=" + totalTaskNumOfSet.get(setid) + "\n");
+                            " taskid = " + taskid +
+                            ",sequence = " + seq +
+                            ",has complete num = " + preNum +
+                            ",total num = " + totalTaskNumOfSet.get(setid) + "\n");
                     //唤醒
                     synchronized (wakeUp.get(setid)) {
                         if (preNum == totalTaskNumOfSet.get(setid)){
@@ -688,13 +699,13 @@ public class ApplicationMaster {
                             "error.TaskTransUtil.getTaskById Null Pointer. + \"\\n\"");
                 }
                 // non complete containers should not be here
-                /*assert (containerStatus.getState() == ContainerState.COMPLETE);
+                assert (containerStatus.getState() == ContainerState.COMPLETE);
 
-                // increment counters for completed/failed containers
+               /* // increment counters for completed/failed containers
                 int exitStatus = containerStatus.getExitStatus();
                 // 执行c的时候有问题，会有exitstatus = 16，但执行结果是正确的
                 // 先做一下处理，让application正常结束
-                if (0 != exitStatus && exitStatus != 16) {
+                if (0 != exitStatus) {
                     // container failed
                     if (ContainerExitStatus.ABORTED != exitStatus) {
 
@@ -758,6 +769,11 @@ public class ApplicationMaster {
 
                 // 从队列里取一个task,并从中删除
                 Task t = taskQueue.poll();
+                if(t == null){
+                    // 如果取不到，说明没有task申请Container
+                    LOG.info("Task queue is empty, abandon this container.");
+                    return;
+                }
                 LaunchContainerRunnable runnableLaunchContainer =
                         new LaunchContainerRunnable(allocatedContainer, containerListener, t);
                 Thread launchThread = new Thread(runnableLaunchContainer);
@@ -766,7 +782,8 @@ public class ApplicationMaster {
                 // containerid -- taskid
                 String val = t.getJobId() + "_" + t.getTaskId();
                 ctMap.put(allocatedContainer.getId().toString(), val);
-                LOG.info("\n\nGet a task from TaskQueue, launch Running thread. contaienrid = "
+                LOG.info("\n\nGet a task from TaskQueue, residue " + taskQueue.size() + " tasks" +
+                        ", launch Running thread. Bind contaienrid = "
                         + allocatedContainer.getId().toString() + "<--->task tag = "
                         + val);
             }
@@ -810,11 +827,16 @@ public class ApplicationMaster {
         // 每个job都有一个单独的scheduler线程
         Schedule schedule = null;
         List<Task> tasks = null;
+        String jobId = "";
 
         public SchedulerThread(List<Task> tasks) {
+            if (tasks.isEmpty()){
+                LOG.error("New scheduler thread error, tasks list is empty.");
+                return;
+            }
             this.tasks = tasks;
             schedule = new Schedule(tasks);
-
+            this.jobId = tasks.get(0).getJobId();
         }
 
         @Override
@@ -842,9 +864,14 @@ public class ApplicationMaster {
                             LOG.info("\n\n------zongzan---" +
                                     "Wait to be completed, TaskSet id=" + taskSet.getSetId() + "\n");
                             wakeUp.get(taskSet.getSetId()).wait();
-
-                            LOG.info("\n\n------zongzan---" +
-                                    "Wake Up! Come to next seq.\n");
+                            if(i == taskSetsSize - 1) {
+                                LOG.info("\n\n------zongzan---" +
+                                        "All taskset is completed, job "+jobId+" is done.\n");
+                            }
+                            else {
+                                LOG.info("\n\n------zongzan---" +
+                                        "Wake Up! Come to next seq.\n");
+                            }
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
