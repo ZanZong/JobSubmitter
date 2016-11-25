@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hdfs.qjournal.server.GetJournalEditServlet;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.LdapGroupsMapping;
@@ -111,7 +112,8 @@ public class Client {
     // Start time for client
     private final long clientStartTime = System.currentTimeMillis();
     // Timeout threshold for client. Kill app after time interval expires.
-    private long clientTimeout = 600000;
+    // Set 5 mins.
+    private long clientTimeout = 300000;
 
     // flag to indicate whether to keep containers across application attempts.
     private boolean keepContainers = false;
@@ -325,6 +327,7 @@ public class Client {
         taskType = cliParser.getOptionValue("task_type");
         // 从配置文件加载job
         jobXml = cliParser.getOptionValue("job_xml");
+
         if(jobXml.equals("null")){
             LOG.error("Can't find job XML.");
         }
@@ -336,20 +339,20 @@ public class Client {
                     + " exiting."
                     + " Specified containerMemory=" + containerMemory
                     + ", containerVirtualCores=" + containerVirtualCores
-                    + ", numContainer=" + numContainers);
-        }
+        + ", numContainer=" + numContainers);
+    }
 
-        nodeLabelExpression = cliParser.getOptionValue("node_label_expression", null);
+    nodeLabelExpression = cliParser.getOptionValue("node_label_expression", null);
 
-        clientTimeout = Integer.parseInt(cliParser.getOptionValue("timeout", "600000"));
+    clientTimeout = Integer.parseInt(cliParser.getOptionValue("timeout", "120000"));
 
-        attemptFailuresValidityInterval =
-                Long.parseLong(cliParser.getOptionValue(
-                        "attempt_failures_validity_interval", "-1"));
+    attemptFailuresValidityInterval =
+            Long.parseLong(cliParser.getOptionValue(
+            "attempt_failures_validity_interval", "-1"));
 
-        //log4jPropFile = cliParser.getOptionValue("log_properties", "");
+    //log4jPropFile = cliParser.getOptionValue("log_properties", "");
 
-        // Get timeline domain options
+    // Get timeline domain options
         if (cliParser.hasOption("domain")) {
             domainId = cliParser.getOptionValue("domain");
             toCreateDomain = cliParser.hasOption("create");
@@ -494,23 +497,30 @@ public class Client {
                 if(jarPathMap.get(task.getJarPath()) == null) {
                     // 该taskjar需要存到hdfs
                     addRescToContainer(fs, task, appId.toString());
-                    jarPathMap.put(task.getJarPath(), task.getTaskId());
+                    jarPathMap.put(task.getJarPath(), task.getJobId()+ "_" + task.getTaskId());
                 }
                 else {
                     // 已经存过了，直接从hdfs取
-                    String taskId = jarPathMap.get(task.getJarPath());
-                    try {
-                        task.setTaskJarLen(TaskTransUtil.
-                                getTaskById(taskId, job.getTasks()).getTaskJarLen());
-                        task.setTaskJarLocation(TaskTransUtil.
-                                getTaskById(taskId, job.getTasks()).getTaskJarLocation());
-                        task.setTaskJarTimestamp(TaskTransUtil.
-                                getTaskById(taskId, job.getTasks()).getTaskJarTimestamp());
-                        LOG.info("Already has jar in contaier. Task id = " + task.getTaskId());
-                    } catch (NullPointerException e) {
-                        LOG.error("Don't have task which taskid=" + taskId
-                                + "in tasks.");
-                        e.printStackTrace();
+                    String tmps = jarPathMap.get(task.getJarPath());
+                    String jobId = tmps.split("_")[0];
+                    String taskId = tmps.split("_")[1];
+                    Task proTask = TaskTransUtil.
+                            getTaskById(taskId, TaskTransUtil.
+                                    getJobById(jobId, jobs).getTasks());
+                    if(proTask == null){
+                        LOG.error("Set task file location error.");
+                    }
+                    else{
+                        try {
+                            task.setTaskJarLen(proTask.getTaskJarLen());
+                            task.setTaskJarLocation(proTask.getTaskJarLocation());
+                            task.setTaskJarTimestamp(proTask.getTaskJarTimestamp());
+                            LOG.info("Already has jar in contaier. Task id = " + task.getTaskId());
+                        } catch (NullPointerException e) {
+                            LOG.error("Don't have task which taskid=" + taskId
+                                    + "in tasks.");
+                            e.printStackTrace();
+                        }
                     }
                 }
             }
@@ -690,9 +700,9 @@ public class Client {
 
         while (true) {
 
-            // Check app status every 1 second.
+            // Check app status every 2 second.
             try {
-                Thread.sleep(1000);
+                Thread.sleep(2000);
             } catch (InterruptedException e) {
                 LOG.debug("Thread sleep in monitoring loop interrupted");
             }

@@ -133,6 +133,14 @@ public class TaskTransUtil {
         return null;
     }
 
+    public static Job getJobById(String id, List<Job> jobs) {
+        for(Job job : jobs) {
+            if(job.getJobId().equals(id)){
+                return job;
+            }
+        }
+        return null;
+    }
     public static String getFileNameByPath(String URI){
         final String SPLIT = "/";
         String[] res = URI.split(SPLIT);

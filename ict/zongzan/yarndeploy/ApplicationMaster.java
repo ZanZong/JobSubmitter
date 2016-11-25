@@ -227,7 +227,6 @@ public class ApplicationMaster {
     //Map: 用来唤醒等待该set完成的Scheduler线程
     Map<String, TaskSet> wakeUp = new HashMap<>();
 
-
     // Timeline Client
     @VisibleForTesting
     TimelineClient timelineClient;
@@ -402,7 +401,7 @@ public class ApplicationMaster {
 
         // set task type
         taskType = envs.get(DSConstants.TASKTYPE);
-        LOG.info("TaskType = " + taskType);
+        LOG.info("TaskType = " + taskType + ",numTotalContainers:" + numTotalContainers);
         if (envs.containsKey(DSConstants.JOBSUBMITTERDOMAIN)) {
             domainId = envs.get(DSConstants.JOBSUBMITTERDOMAIN);
         }
@@ -411,7 +410,6 @@ public class ApplicationMaster {
             throw new IllegalArgumentException(
                     "Cannot run task with no containers. Total containers number is 0");
         }
-
         return true;
     }
 
@@ -520,25 +518,21 @@ public class ApplicationMaster {
                 + " previous attempts' running containers on AM registration.");
         numAllocatedContainers.addAndGet(previousAMRunningContainers.size());//总共分配了多少
 
-        int numTotalContainersToRequest =
-                numTotalContainers - previousAMRunningContainers.size();
+       /* int numTotalContainersToRequest =
+                numTotalContainers - previousAMRunningContainers.size();*/
 
-        // 循环向RM请求Container，直到所有所需的资源全部被请求到
+        // 每个job使用单独的线程，循环向RM请求Container，直到所有所需的资源全部被请求到
         // 并循环启动所有的Container并执行程序，执行结果（success/failure）并不关心
-
-        /*for (int i = 0; i < tasks.size(); ++i) {
-            ContainerRequest containerAsk = setupContainerAskForRM(tasks.get(i));
-            amRMClient.addContainerRequest(containerAsk);
-        }*/
-
         for(Job job : jobs){
             LOG.info("\n\n----zongzan--Launch job scheduler thread:jobid=" + job.getJobId()
-                    + ", JobList Size=" + jobs.size());
+                    + ", JobList Size=" + jobs.size()+",job:"+job);
+
             SchedulerThread schedulerThread = new SchedulerThread(job.getTasks());
             Thread st = new Thread(schedulerThread);
             st.start();
             schedulerThreads.add(st);
         }
+
         numRequestedContainers.set(numTotalContainers);
     }
 
@@ -578,11 +572,10 @@ public class ApplicationMaster {
         while (!done
                 && (numCompletedContainers.get() != numTotalContainers)) {
             try {
-                Thread.sleep(500);
-            } catch (InterruptedException ex) {
-            }
+            Thread.sleep(500);
+        } catch (InterruptedException ex) {
         }
-
+        }
 
         if (timelineClient != null) {
             publishApplicationAttemptEvent(timelineClient, appAttemptID.toString(),
@@ -595,7 +588,7 @@ public class ApplicationMaster {
         //这里是等待10s
         for (Thread launchThread : launchThreads) {
             try {
-                launchThread.join(50000);
+                launchThread.join(10000);
             } catch (InterruptedException e) {
                 LOG.info("Exception thrown in launchthread join: " + e.getMessage());
                 e.printStackTrace();
@@ -603,7 +596,7 @@ public class ApplicationMaster {
         }
         for(Thread st : schedulerThreads) {
             try {
-                st.join();
+                st.join(10000);
             } catch (InterruptedException e) {
                 LOG.info("Exception thrown in schedulerthread join: " + e.getMessage());
                 e.printStackTrace();
@@ -661,14 +654,14 @@ public class ApplicationMaster {
                         + containerStatus.getContainerId() + ", state="
                         + containerStatus.getState() + ", exitStatus="
                         + containerStatus.getExitStatus() + ", diagnostics="
-                       /* + containerStatus.getDiagnostics()*/);
+                        + containerStatus.getDiagnostics());
                 // 增加计数
                 String tag = ctMap.get(containerStatus.getContainerId().toString());
                 String taskid = tag.split("_")[1];
                 String jobid = tag.split("_")[0];
                 Task task = TaskTransUtil.getTaskById(taskid, tasksMap.get(jobid));
-                LOG.info(tag + " Completed task id = " + taskid + ", jobid = " + jobid
-                            + " <=====> Container id = " + containerStatus.getContainerId().toString());
+                LOG.info("\n\n" + tag + " Completed task id = " + taskid + ", jobid = " + jobid
+                            + " <=====> Container id = " + containerStatus.getContainerId().toString()+"\n");
                 if(task != null){
                     int seq = task.getExecSequence();
                     String setid = scheduleMap.get(jobid).getSetIdByTask(seq);
@@ -748,26 +741,26 @@ public class ApplicationMaster {
         }
 
         @Override
-        public void onContainersAllocated(List<Container> allocatedContainers) {
-            //当请求得到RM的回复时，RM回调该方法，启动Container
+            public void onContainersAllocated(List<Container> allocatedContainers) {
+                //当请求得到RM的回复时，RM回调该方法，启动Container
 
-            LOG.info("Got response from RM for container ask, allocatedCnt="
-                    + allocatedContainers.size());
-            numAllocatedContainers.addAndGet(allocatedContainers.size());
-            for (Container allocatedContainer : allocatedContainers) {
-                LOG.info("Allocated a new container and run a new task in queue"
-                        + ", containerId=" + allocatedContainer.getId()
-                        + ", containerNode=" + allocatedContainer.getNodeId().getHost()
-                        + ":" + allocatedContainer.getNodeId().getPort()
-                        + ", containerNodeURI=" + allocatedContainer.getNodeHttpAddress()
-                        + ", containerResourceMemory"
-                        + allocatedContainer.getResource().getMemory()
-                        + ", containerResourceVirtualCores"
-                        + allocatedContainer.getResource().getVirtualCores()
-                        + ", containerToken"
-                        + allocatedContainer.getContainerToken().getIdentifier().toString());
+                LOG.info("Got response from RM for container ask, allocatedCnt="
+                        + allocatedContainers.size());
+                numAllocatedContainers.addAndGet(allocatedContainers.size());
+                for (Container allocatedContainer : allocatedContainers) {
+                    LOG.info("Allocated a new container and run a new task in queue"
+                            + ", containerId=" + allocatedContainer.getId()
+                            + ", containerNode=" + allocatedContainer.getNodeId().getHost()
+                            + ":" + allocatedContainer.getNodeId().getPort()
+                            + ", containerNodeURI=" + allocatedContainer.getNodeHttpAddress()
+                            + ", containerResourceMemory"
+                            + allocatedContainer.getResource().getMemory()
+                            + ", containerResourceVirtualCores"
+                            + allocatedContainer.getResource().getVirtualCores()
+                            + ", containerToken"
+                            + allocatedContainer.getContainerToken().getIdentifier().toString());
 
-                // 从队列里取一个task,并从中删除
+                    // 从队列里取一个task,并从中删除
                 Task t = taskQueue.poll();
                 if(t == null){
                     // 如果取不到，说明没有task申请Container
@@ -883,13 +876,11 @@ public class ApplicationMaster {
 
     }
 
-
     /**
      *
      * RM分配好Container资源后之后，在RM的handler中使用回调方法启动该线程运行Container
-     * 该线程是Container的具体的工作
-     * Thread to connect to the {@link ContainerManagementProtocol} and launch the container
-     * that will execute the shell command.
+     * 该线程是Container的具体的工作，使用的协议ContainerManagementProtocol连接
+     * 到RM，由startContainerAsync封装，{@link ContainerManagementProtocol}
      */
     private class LaunchContainerRunnable implements Runnable {
 
@@ -954,8 +945,7 @@ public class ApplicationMaster {
             // Set the necessary command to execute on the allocated container
             Vector<CharSequence> vargs = new Vector<CharSequence>(5);
 
-            // 设置运行命令，不用脚本，改为直接运行命令
-            // Set shell script path
+            // 设置运行脚本或命令
             /*if (!scriptPath.isEmpty()) {
             vargs.add(ExecShellStringPath);
             }*/
@@ -976,7 +966,7 @@ public class ApplicationMaster {
 
             //shellCommand = linux_bash_command;
             vargs.add(shellCommand);
-            // Set args for the shell command if any
+            // Set args for the shell command
             vargs.add(shellArgs);
             //Container日志路径，包含Container的输出和错误日志，位于/hadoop/userlogs/
             vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout");
@@ -990,7 +980,8 @@ public class ApplicationMaster {
 
             List<String> commands = new ArrayList<String>();
             commands.add(command.toString());
-
+            LOG.info(task.getJobId()+"_"+task.getTaskId()
+                    +" "+"Execute command:" + command.toString());
             // Set up ContainerLaunchContext, setting local resource, environment,
             // command and token for constructor.
             ContainerLaunchContext ctx = ContainerLaunchContext.newInstance(
@@ -1035,27 +1026,23 @@ public class ApplicationMaster {
 
         @Override
         public void onContainerStopped(ContainerId containerId) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Succeeded to stop Container " + containerId);
-            }
+            LOG.info("Succeeded to stop Container " + containerId);
             containers.remove(containerId);
         }
 
         @Override
         public void onContainerStatusReceived(ContainerId containerId,
                                               ContainerStatus containerStatus) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Container Status: id=" + containerId + ", status=" +
+            LOG.info("Container Status: id=" + containerId + ", status=" +
                         containerStatus);
-            }
         }
 
         @Override
         public void onContainerStarted(ContainerId containerId,
                                        Map<String, ByteBuffer> allServiceResponse) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Succeeded to start Container " + containerId);
-            }
+
+            LOG.info("Succeeded to start Container " + containerId);
+
             Container container = containers.get(containerId);
             if (container != null) {
                 applicationMaster.nmClientAsync.getContainerStatusAsync(containerId, container.getNodeId());
