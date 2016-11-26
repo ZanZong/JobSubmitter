@@ -9,8 +9,7 @@ import ict.zongzan.scheduler.Task;
 import ict.zongzan.yarndeploy.DSConstants;
 
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
  * 在Client将task提交到ApplicationMaster，转成json字符串，在Master取出
@@ -98,6 +97,8 @@ public class TaskTransUtil {
         return job;
     }
 
+
+    // get less tasks for test
     public static Job jobFactory(){
         List<Task> tasks = new ArrayList<Task>();
         Task t = null;
@@ -106,17 +107,17 @@ public class TaskTransUtil {
             r = new Resource(1, 1500);
             t = new Task(r, "/home/zongzan/taskjar/task" + (i+1) +".jar");
             t.setJobId("000001");
-            t.setTaskId("8600" + i);
+            t.setTaskId("00" + i);
             t.setNextTask("86004");
             if(i == 3)
                 t.setNextTask("null");
             t.setPriority(1);
             tasks.add(t);
         }
-        tasks.get(0).setExecSequence(0);
-        tasks.get(1).setExecSequence(0);
+        tasks.get(0).setExecSequence(1);
+        tasks.get(1).setExecSequence(3);
         tasks.get(2).setExecSequence(0);
-        tasks.get(3).setExecSequence(1);
+        tasks.get(3).setExecSequence(2);
 
         Job job = new Job(tasks);
         job.setJobId("000001");
@@ -141,6 +142,7 @@ public class TaskTransUtil {
         }
         return null;
     }
+
     public static String getFileNameByPath(String URI){
         final String SPLIT = "/";
         String[] res = URI.split(SPLIT);
@@ -150,49 +152,34 @@ public class TaskTransUtil {
         else
             return "ERROR";
     }
+
+    public static void getTaskByPriority(int priority) {
+        Job job = jobFactory();
+
+        // 默认最大的task长度为100
+        Queue<Task> taskQueue = new PriorityQueue<>(100, taskCmp);
+        for(int i = 0; i < 4; i++) {
+            taskQueue.offer(job.getTasks().get(i));
+        }
+        for(int i = 0; i < 4; i++) {
+            System.out.println(taskQueue.poll().getExecSequence());
+        }
+
+
+    }
+
+    // 匿名内部类实现comparator接口
+    public static Comparator<Task> taskCmp = new Comparator<Task>() {
+        @Override
+        public int compare(Task o1, Task o2) {
+            return o2.getPriority()-o1.getPriority();
+        }
+    };
+
     //test
     public static void main(String[] args){
         // 对解析字符串测试
-        Job job = jobFactory();
-        Gson gson = new Gson();
-        String str = gson.toJson(job);
-        //System.out.println(str);
-
-        System.out.println(getJob(str).getTasks().get(0));
-
-       /* Gson gson = new Gson();
-        String taskString = gson.toJson(job.getTasks().get(0));
-        System.out.println(taskString);
-        JsonParser parser = new JsonParser();
-        JsonElement element = parser.parse(taskString);
-
-        JsonObject jsonObject = null;
-        if(element.isJsonObject()){
-            jsonObject = element.getAsJsonObject();
-        }
-        System.out.println("id:"+jsonObject.get("taskId")+" taskJarLen:"+jsonObject.get("taskJarLen")
-                            +" Location:" + jsonObject.get("taskJarLocation"));
-        JsonObject resObject = jsonObject.getAsJsonObject("resourceRequests");
-
-        System.out.println("resource:" + resObject.toString());
-
-        System.out.println("ram:" + resObject.get("RAM").toString());
-*/
-        //测试getFileNameByPath
-       /* String s = getFileNameByPath("hdfs://hw115:9000//user/root/JobSubmitter/application_001/task1.jar");
-        System.out.println(s);
-*/
-
-        //测试getTask()
-        /*String s = "{\"taskId\":\"86000\",\"jobId\":\"000001\",\"resourceRequests\"" +
-                ":{\"cores\":1,\"RAM\":1500,\"localDiskSpace\":0,\"scps\":0.0},\"jarPath\":\"/home/zongzan/taskjar/task1.jar\",\"taskJarLen\":53152605,\"taskJarTimestamp\":1479308270442,\"taskJarLocation\":\"hdfs://hw115:9000/user/root/JobSubmitter/application_1479024382672_0027/task1.jar\",\"nextTask\":\"86003\",\"priority\":1}";
-        Task t = getTask(s);
-        System.out.println(t.toString());*/
-        /*System.out.println(t.getJarPath());
-        System.out.println(t.getTaskJarTimestamp());
-        System.out.println(t.getResourceRequests().toString());
-*/
-
+        getTaskByPriority(3);
 
     }
 

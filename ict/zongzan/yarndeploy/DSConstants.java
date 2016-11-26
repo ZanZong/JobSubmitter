@@ -66,4 +66,8 @@ public class DSConstants {
     public static final String RAM = "RAM";
     public static final String LOCALDISKSPACE = "localDiskSpace";
     public static final String SCPS = "scps";
+
+    // 日志解析的时候，使用该tag，作行筛选
+    public static final String TASKSTART = "[TASKSTART]";
+    public static final String TASKEND = "[TASKEND]";
 }

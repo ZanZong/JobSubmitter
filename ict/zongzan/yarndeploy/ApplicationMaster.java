@@ -154,7 +154,7 @@ public class ApplicationMaster {
     // App Master configuration
     // No. of containers to run shell command on
     @VisibleForTesting
-    protected int numTotalContainers = 1;
+    protected int numTotalContainers = 0;
     // Memory to request for the container on which the shell command will run
     private int containerMemory = 10;
     // VirtualCores to request for the container on which the shell command will run
@@ -216,8 +216,10 @@ public class ApplicationMaster {
 
     //scheduler
     Map<String, Schedule> scheduleMap = new HashMap<>();
-    // container等待队列
-    Queue<Task> taskQueue = new LinkedList<Task>();
+
+    // task等待队列，每个优先级都对应一个队列priority --> taskQueue
+    // Queue<Task> taskQueue = new LinkedList<Task>();
+    Map<Integer, LinkedList<Task>> taskQueuePool = new HashMap<>();
     //Map: alloc containerid --> taskid
     Map<String, String> ctMap = new HashMap<>();
     //Map: 每个set里的task完成数量setid --> num
@@ -534,6 +536,7 @@ public class ApplicationMaster {
         }
 
         numRequestedContainers.set(numTotalContainers);
+
     }
 
     @VisibleForTesting
@@ -569,11 +572,13 @@ public class ApplicationMaster {
     @VisibleForTesting
     protected boolean finish() {
         // wait for completion.
-        while (!done
-                && (numCompletedContainers.get() != numTotalContainers)) {
+        LOG.info("Come to finish(). Wait all thread done.");
+
+        while ((numCompletedContainers.get() != numTotalContainers)) {
             try {
-            Thread.sleep(500);
+            Thread.sleep(1000);
         } catch (InterruptedException ex) {
+                ex.printStackTrace();
         }
         }
 
@@ -605,6 +610,7 @@ public class ApplicationMaster {
 
         // 结束container，向RM发送通知
         LOG.info("Application completed. Stopping running containers");
+
         nmClientAsync.stop();
 
         LOG.info("Application completed. Signalling finish to RM");
@@ -660,8 +666,10 @@ public class ApplicationMaster {
                 String taskid = tag.split("_")[1];
                 String jobid = tag.split("_")[0];
                 Task task = TaskTransUtil.getTaskById(taskid, tasksMap.get(jobid));
-                LOG.info("\n\n" + tag + " Completed task id = " + taskid + ", jobid = " + jobid
-                            + " <=====> Container id = " + containerStatus.getContainerId().toString()+"\n");
+
+                LOG.info("\n\n" + DSConstants.TASKEND + " Completed task id=" + taskid + ", jobid=" + jobid
+                            + " <=====> containerId=" + containerStatus.getContainerId().toString()
+                            + ", timestamp="+ System.currentTimeMillis() + "\n");
                 if(task != null){
                     int seq = task.getExecSequence();
                     String setid = scheduleMap.get(jobid).getSetIdByTask(seq);
@@ -673,7 +681,7 @@ public class ApplicationMaster {
                     cmpltTaskNumOfSet.put(setid, ++preNum);
 
 
-                    LOG.info("\n\n----zongzan----" +
+                    LOG.info("\n\n----zongzan---" +
                             " taskid = " + taskid +
                             ",sequence = " + seq +
                             ",has complete num = " + preNum +
@@ -689,7 +697,7 @@ public class ApplicationMaster {
                 }
                 else{
                     LOG.info("\n\n----zongzan---" +
-                            "error.TaskTransUtil.getTaskById Null Pointer. + \"\\n\"");
+                            "error.TaskTransUtil.getTaskById Null Pointer.");
                 }
                 // non complete containers should not be here
                 assert (containerStatus.getState() == ContainerState.COMPLETE);
@@ -717,6 +725,7 @@ public class ApplicationMaster {
                     LOG.info("Container completed successfully." + ", containerId="
                             + containerStatus.getContainerId());
                // }
+
                 if (timelineClient != null) {
                     publishContainerEndEvent(
                             timelineClient, containerStatus, domainId, appSubmitterUgi);
@@ -753,14 +762,16 @@ public class ApplicationMaster {
                             + ", containerNode=" + allocatedContainer.getNodeId().getHost()
                             + ":" + allocatedContainer.getNodeId().getPort()
                             + ", containerNodeURI=" + allocatedContainer.getNodeHttpAddress()
-                            + ", containerResourceMemory"
+                            + ", containerResourceMemory="
                             + allocatedContainer.getResource().getMemory()
-                            + ", containerResourceVirtualCores"
+                    + ", containerResourceVirtualCores="
                             + allocatedContainer.getResource().getVirtualCores()
-                            + ", containerToken"
-                            + allocatedContainer.getContainerToken().getIdentifier().toString());
+                            + ", containerToken="
+                            + allocatedContainer.getContainerToken().getIdentifier().toString()
+                    + ", contaierPriority=" + allocatedContainer.getPriority().toString());
 
                     // 从队列里取一个task,并从中删除
+                LinkedList<Task> taskQueue = taskQueuePool.get(Integer.parseInt(allocatedContainer.getPriority().toString()));
                 Task t = taskQueue.poll();
                 if(t == null){
                     // 如果取不到，说明没有task申请Container
@@ -775,10 +786,11 @@ public class ApplicationMaster {
                 // containerid -- taskid
                 String val = t.getJobId() + "_" + t.getTaskId();
                 ctMap.put(allocatedContainer.getId().toString(), val);
-                LOG.info("\n\nGet a task from TaskQueue, residue " + taskQueue.size() + " tasks" +
-                        ", launch Running thread. Bind contaienrid = "
-                        + allocatedContainer.getId().toString() + "<--->task tag = "
-                        + val);
+                LOG.info("\n\n" + DSConstants.TASKSTART + " Get a task from TaskQueue, residue " + taskQueue.size() + " tasks" +
+                        ", launch Running thread. Bind contaienrId="
+                        + allocatedContainer.getId().toString() + "<----->taskTag="
+                        + val + ", proprity=" + t.getPriority()
+                        + ", timestamp=" + System.currentTimeMillis() + "\n");
             }
         }
 
@@ -846,7 +858,19 @@ public class ApplicationMaster {
                     // 添加到container等待队列，下面三句是否要加锁？
                     ContainerRequest containerAsk = setupContainerAskForRM(task);
                     amRMClient.addContainerRequest(containerAsk);
-                    taskQueue.offer(task);
+                    // 放到taskpool，onAllocate时取出来
+                    LinkedList<Task> taskQueue = taskQueuePool.get(task.getPriority());
+                    if(taskQueue == null) {
+                        // 新建队列
+                        taskQueue = new LinkedList();
+                        taskQueue.offer(task);
+                        taskQueuePool.put(task.getPriority(), taskQueue);
+                    }
+                    else {
+                        // 直接插入
+                        taskQueue.offer(task);
+                    }
+
                 }
                 LOG.info("Run Scheduler Thread, execute tasks in taskset, tasksetid = " + taskSet.getSetId());
                 // 等待这个set运行完，在complete方法中唤醒
@@ -871,6 +895,7 @@ public class ApplicationMaster {
                     }
                 }
             }
+            LOG.info("Scheduler thread done. JobId=" + jobId);
         }
 
 
