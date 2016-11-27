@@ -344,7 +344,7 @@ public class Client {
 
     nodeLabelExpression = cliParser.getOptionValue("node_label_expression", null);
 
-    clientTimeout = Integer.parseInt(cliParser.getOptionValue("timeout", "120000"));
+    clientTimeout = Integer.parseInt(cliParser.getOptionValue("timeout", "600000"));
 
     attemptFailuresValidityInterval =
             Long.parseLong(cliParser.getOptionValue(

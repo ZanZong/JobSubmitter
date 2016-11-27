@@ -667,9 +667,12 @@ public class ApplicationMaster {
                 String jobid = tag.split("_")[0];
                 Task task = TaskTransUtil.getTaskById(taskid, tasksMap.get(jobid));
 
-                LOG.info("\n\n" + DSConstants.TASKEND + " Completed task id=" + taskid + ", jobid=" + jobid
-                            + " <=====> containerId=" + containerStatus.getContainerId().toString()
-                            + ", timestamp="+ System.currentTimeMillis() + "\n");
+                /*LOG.info("\n\n" + " Completed task id=" + taskid + ", jobid=" + jobid
+                        + " <=====> containerId=" + containerStatus.getContainerId().toString() + "\n");*/
+                // 供日志解析
+                LOG.info("\n" + DSConstants.TASKEND + ",TASKTAG=" + jobid + "_" + taskid
+                        + ",TIMESTAMP=" + System.currentTimeMillis() + "\n");
+
                 if(task != null){
                     int seq = task.getExecSequence();
                     String setid = scheduleMap.get(jobid).getSetIdByTask(seq);
@@ -786,11 +789,16 @@ public class ApplicationMaster {
                 // containerid -- taskid
                 String val = t.getJobId() + "_" + t.getTaskId();
                 ctMap.put(allocatedContainer.getId().toString(), val);
-                LOG.info("\n\n" + DSConstants.TASKSTART + " Get a task from TaskQueue, residue " + taskQueue.size() + " tasks" +
+
+                // 供日志解析
+                LOG.info("\n" + DSConstants.TASKSTART + ",TASKTAG=" + val
+                        + ",TIMESTAMP=" + System.currentTimeMillis()
+                        + ",CONTAINERID=" + allocatedContainer.getId()
+                        + ",PRIORITY=" + allocatedContainer.getPriority() + "\n");
+
+               /* LOG.info("\n" + " Get a task from TaskQueue, residue " + taskQueue.size() + " tasks" +
                         ", launch Running thread. Bind contaienrId="
-                        + allocatedContainer.getId().toString() + "<----->taskTag="
-                        + val + ", proprity=" + t.getPriority()
-                        + ", timestamp=" + System.currentTimeMillis() + "\n");
+                        + allocatedContainer.getId().toString() + "<----->taskTag=" + "\n");*/
             }
         }
 
