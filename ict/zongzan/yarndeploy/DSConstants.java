@@ -44,7 +44,8 @@ public class DSConstants {
     // Job
     public static final String JOBNUM = "JOBNUM";
     public static final String JOBIDSTRING = "JOBSIDSTRING";
-
+    //memory
+    public static final String MEMCONSUME = "MEMCONSUME";
 
     // job成员变量
     public static final String JOBTASKS = "tasks";

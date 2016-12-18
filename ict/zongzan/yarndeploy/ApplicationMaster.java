@@ -35,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import ict.zongzan.calculate.CloudArchOriginal;
 import ict.zongzan.calculate.IbsCProgram;
 import ict.zongzan.scheduler.Job;
 import ict.zongzan.scheduler.Schedule;
@@ -197,7 +198,7 @@ public class ApplicationMaster {
     private Map<String, List<Task>> tasksMap = new HashMap<>();
     // task类型，
     private String taskType = "";
-
+    private Task memConsume = new Task();
     // Timeline domain ID
     private String domainId = null;
 
@@ -374,6 +375,11 @@ public class ApplicationMaster {
                 shellEnv.put(key, val);
             }
         }
+        // get memorycore, have some error with Gson,so use more bad method bellow
+        String memInfo = envs.get(DSConstants.MEMCONSUME);
+        memConsume.setTaskJarLocation(memInfo.split(";")[0]);
+        memConsume.setTaskJarLen(Long.parseLong(memInfo.split(";")[1]));
+        memConsume.setTaskJarTimestamp(Long.parseLong(memInfo.split(";")[2]));
 
         String jobids = envs.get(DSConstants.JOBIDSTRING);
         //根据id得到Json字符串，解析得到Task对象
@@ -961,9 +967,12 @@ public class ApplicationMaster {
                   taskJarLen, taskJarTimestamp);
             localResources.put("YarnApp.jar", taskJarRsrc);*/
             URL taskUrl = null;
+            URL memUrl = null;
             try {
                 taskUrl = ConverterUtils.getYarnUrlFromURI(
                         new URI(task.getTaskJarLocation()));
+                memUrl = ConverterUtils.getYarnUrlFromURI(
+                        new URI(memConsume.getTaskJarLocation()));
             } catch (URISyntaxException e) {
                 LOG.error("Error when trying to use task jar path specified"
                         + " in env, path=" + task.getJarPath(), e);
@@ -974,7 +983,11 @@ public class ApplicationMaster {
             LocalResource taskJarRsrc = LocalResource.newInstance(taskUrl,
                     LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
                     task.getTaskJarLen(), task.getTaskJarTimestamp());
+            LocalResource memJarRsrc = LocalResource.newInstance(memUrl,
+                    LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
+                    memConsume.getTaskJarLen(), memConsume.getTaskJarTimestamp());
             localResources.put(TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()), taskJarRsrc);
+            localResources.put(TaskTransUtil.getFileNameByPath(memConsume.getTaskJarLocation()), memJarRsrc);
             // Set the necessary command to execute on the allocated container
             Vector<CharSequence> vargs = new Vector<CharSequence>(5);
 
@@ -990,17 +1003,28 @@ public class ApplicationMaster {
             }
             else if (taskType.equals("shellscript")){
                 shellCommand = "bash";
+                // unfinished
             }
             else if (taskType.equals("c-program")){
                 shellCommand = "./" + TaskTransUtil.getFileNameByPath(task.getTaskJarLocation());
                 shellArgs = IbsCProgram.getLoops(task.getResourceRequests().getScps(),
                                     task.getResourceRequests().getCores());
             }
-
+            else if (taskType.equals("assembly")) {
+                long loops = CloudArchOriginal.getloops(task.getResourceRequests().getScps(),
+                                    task.getResourceRequests().getCores());
+                int time =(int) task.getResourceRequests().getScps() / task.getResourceRequests().getCores();
+                shellCommand = "./memorycore " + task.getResourceRequests().getRAM() + " " + time + " &";
+                shellArgs = "time for((a=0;a<" + loops + ";a++));do ./"
+                        + TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";
+            }
             //shellCommand = linux_bash_command;
-            vargs.add(shellCommand);
+            //vargs.add(shellCommand);
             // Set args for the shell command
+            //vargs.add(shellArgs);
+            vargs.add(shellCommand);
             vargs.add(shellArgs);
+
             //Container日志路径，包含Container的输出和错误日志，位于/hadoop/userlogs/
             vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout");
             vargs.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr");

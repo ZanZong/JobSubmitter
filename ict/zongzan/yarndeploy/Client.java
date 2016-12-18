@@ -11,6 +11,7 @@ import ict.zongzan.scheduler.Job;
 import ict.zongzan.scheduler.Task;
 import ict.zongzan.util.JobLoader;
 import ict.zongzan.util.TaskTransUtil;
+import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -51,7 +52,6 @@ import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
-import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.YarnClusterMetrics;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineDomain;
@@ -138,14 +138,14 @@ public class Client {
     // Command line options
     private Options opts;
 
-    //提交job
+    // 提交job
     private List<Job> jobs = null;
 
     private String jobXml = "";
     // task的类型，设计支持jar、shellscript、汇编、python脚本
     private String taskType = "";
 
-    //hadoop会将运行的jar包解压，按照一定的目录重新打包成包名如下的jar包
+    // hadoop会将运行的jar包解压，按照一定的目录重新打包成包名如下的jar包
     private static final String appMasterJarPath = "AppMaster.jar";
 
     public static final String SCRIPT_PATH = "ExecScript.sh";
@@ -415,7 +415,7 @@ public class Client {
         }
 
         // ----------------Get a new application id---------------------
-        //与ResourceManager通信，创建Application
+        // 与ResourceManager通信，创建Application
         YarnClientApplication app = yarnClient.createApplication();
         GetNewApplicationResponse appResponse = app.getNewApplicationResponse();
         int maxMem = appResponse.getMaximumResourceCapability().getMemory();
@@ -525,7 +525,13 @@ public class Client {
                 }
             }
         }
-
+        // 把消耗内存程序加进来
+        Task memConsume = new Task();
+        ict.zongzan.scheduler.Resource memres = new ict.zongzan.scheduler.Resource(1,1);
+        memConsume.setTaskId("-1");
+        memConsume.setResourceRequests(memres);
+        memConsume.setJarPath("/home/zongzan/Jobsubmitter/tasks/assembly/memorycore");
+        addRescToContainer(fs, memConsume, appId.toString());
         /*// old
         for(Task task : job.getTasks()){
             addRescToContainer(fs, task, appId.toString());
@@ -549,8 +555,10 @@ public class Client {
             env.put(job.getJobId(), gson.toJson(job));
             LOG.info("Transtion Job, jobId=" + job.getJobId());
         }
-
-
+        // memorycore文件的信息传到AM,传过去不带双引号，无法解析
+        //env.put(DSConstants.MEMCONSUME, gson.toJson(memConsume));
+        String memInfo = memConsume.getTaskJarLocation()+";"+memConsume.getTaskJarLen()+";"+memConsume.getTaskJarTimestamp();
+        env.put(DSConstants.MEMCONSUME, memInfo);
         //set task type
         env.put(DSConstants.TASKTYPE, taskType);
 
@@ -629,6 +637,7 @@ public class Client {
         // Set up resource type requirements
         // For now, both memory and vcores are supported, so we set memory and
         // vcores requirements
+
         Resource capability = Resource.newInstance(amMemory, amVCores);
         appContext.setResource(capability);
 
@@ -664,7 +673,6 @@ public class Client {
         appContext.setAMContainerSpec(amContainer);
 
         // Set the priority for the application master
-        // TODO - what is the range for priority? how to decide?
         Priority pri = Priority.newInstance(amPriority);
         appContext.setPriority(pri);
 

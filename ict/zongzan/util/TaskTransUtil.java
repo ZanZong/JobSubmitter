@@ -50,20 +50,20 @@ public class TaskTransUtil {
             }
             else{
                 task.setTaskId(jsonObject.get(DSConstants.TASKID).getAsString());
-                task.setJobId(jsonObject.get(DSConstants.JOBID).getAsString());
+                //task.setJobId(jsonObject.get(DSConstants.JOBID).getAsString());
                 task.setJarPath(jsonObject.get(DSConstants.JARPATH).getAsString());
                 task.setTaskJarLen(jsonObject.get(DSConstants.TASKJARLEN).getAsLong());
                 task.setTaskJarLocation(jsonObject.get(DSConstants.TASKJARLOCATIOIN).getAsString());
                 task.setTaskJarTimestamp(jsonObject.get(DSConstants.TASKJARTIMESTAMP).getAsLong());
-                task.setPriority(jsonObject.get(DSConstants.PRIORITY).getAsInt());
-                task.setNextTask(jsonObject.get(DSConstants.NEXTTASK).getAsString());
-                task.setExecSequence(jsonObject.get(DSConstants.EXECSEQUENCE).getAsInt());
+                //task.setPriority(jsonObject.get(DSConstants.PRIORITY).getAsInt());
+                //task.setNextTask(jsonObject.get(DSConstants.NEXTTASK).getAsString());
+                //task.setExecSequence(jsonObject.get(DSConstants.EXECSEQUENCE).getAsInt());
 
-                Resource r = new Resource(resourceObject.get(DSConstants.CORES).getAsInt(),
-                        resourceObject.get(DSConstants.RAM).getAsInt(),
-                        resourceObject.get(DSConstants.LOCALDISKSPACE).getAsInt(),
-                        resourceObject.get(DSConstants.SCPS).getAsDouble());
-                task.setResourceRequests(r);
+                //Resource r = new Resource(resourceObject.get(DSConstants.CORES).getAsInt(),
+                //        resourceObject.get(DSConstants.RAM).getAsInt(),
+                //        resourceObject.get(DSConstants.LOCALDISKSPACE).getAsInt(),
+                //        resourceObject.get(DSConstants.SCPS).getAsDouble());
+                //task.setResourceRequests(r);
             }
         }
         else{
@@ -179,7 +179,19 @@ public class TaskTransUtil {
     //test
     public static void main(String[] args){
         // 对解析字符串测试
-        getTaskByPriority(3);
+        Gson gson = new Gson();
+        Task memConsume = new Task();
+        Resource memres = new Resource(1,1);
+        memConsume.setTaskId("12121");
+        memConsume.setResourceRequests(memres);
+        memConsume.setTaskJarLen(23434);
+        memConsume.setTaskJarLocation("hdfs:/root/a");
+        memConsume.setTaskJarTimestamp((long)133223);
+        memConsume.setJarPath("/home/zongzan/Jobsubmitter/tasks/assembly/memorycore");
+        System.out.println(gson.toJson(memConsume));
+        String s = "{\"taskId\":\"12121\",\"resourceRequests\":{\"cores\":1,\"RAM\":1,\"localDiskSpace\":0,\"scps\":0.0},\"jarPath\":\"/home/zongzan/Jobsubmitter/tasks/assembly/memorycore\",\"taskJarLen\":23434,\"taskJarTimestamp\":133223,\"taskJarLocation\":\"hdfs:/root/a\",\"nextTask\":\"\",\"execSequence\":0,\"priority\":0}";
+
+        System.out.println(getTask(s).getJarPath());
 
     }
 
