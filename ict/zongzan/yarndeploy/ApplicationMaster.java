@@ -535,7 +535,7 @@ public class ApplicationMaster {
             LOG.info("\n\n----zongzan--Launch job scheduler thread:jobid=" + job.getJobId()
                     + ", JobList Size=" + jobs.size()+",job:"+job);
 
-            SchedulerThread schedulerThread = new SchedulerThread(job.getTasks());
+            SchedulerThread schedulerThread = new SchedulerThread(job);
             Thread st = new Thread(schedulerThread);
             st.start();
             schedulerThreads.add(st);
@@ -847,19 +847,28 @@ public class ApplicationMaster {
         Schedule schedule = null;
         List<Task> tasks = null;
         String jobId = "";
+        long starttime = 0;
 
-        public SchedulerThread(List<Task> tasks) {
-            if (tasks.isEmpty()){
+        public SchedulerThread(Job job) {
+            if (job.getTasks().isEmpty()){
                 LOG.error("New scheduler thread error, tasks list is empty.");
                 return;
             }
-            this.tasks = tasks;
+            this.tasks = job.getTasks();
             schedule = new Schedule(tasks);
-            this.jobId = tasks.get(0).getJobId();
+            this.jobId = job.getJobId();
+            this.starttime = Long.parseLong(job.getStarttime());
         }
 
         @Override
         public void run() {
+            // 等待starttime时间后，作业开始
+            try {
+                LOG.info("Job=" + jobId + " is loaded, wait " + starttime + " seconds to be executed.");
+                Thread.sleep(starttime * 1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
             // 提交container申请
             int i = 0;
             int taskSetsSize = schedule.taskSetsSize();

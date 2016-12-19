@@ -14,6 +14,8 @@ public class Job {
     List<Task> tasks = null;
 
     private String description = "";
+    private String starttime = "";
+
     private int tasksNum = 0;
 
     public Job(List<Task> tasks) {
@@ -23,6 +25,14 @@ public class Job {
 
     public Job() {
 
+    }
+
+    public String getStarttime() {
+        return starttime;
+    }
+
+    public void setStarttime(String starttime) {
+        this.starttime = starttime;
     }
 
     public String getDescription() {
@@ -69,10 +79,11 @@ public class Job {
     @Override
     public String toString() {
         return "Job{" +
-                "jobId=" + jobId +
+                "jobId='" + jobId + '\'' +
                 ", jobName='" + jobName + '\'' +
                 ", tasks=" + tasks +
                 ", description='" + description + '\'' +
+                ", starttime='" + starttime + '\'' +
                 ", tasksNum=" + tasksNum +
                 '}';
     }

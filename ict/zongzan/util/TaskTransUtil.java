@@ -91,6 +91,7 @@ public class TaskTransUtil {
             job.setJobId(jobObject.get(DSConstants.JOBID).getAsString());
             job.setJobName(jobObject.get(DSConstants.JOBNAME).getAsString());
             job.setDescription(jobObject.get("description").getAsString());
+            job.setStarttime(jobObject.get("starttime").getAsString());
             job.setTasks(taskList);
 
         }
@@ -179,7 +180,7 @@ public class TaskTransUtil {
     //test
     public static void main(String[] args){
         // 对解析字符串测试
-        Gson gson = new Gson();
+       /* Gson gson = new Gson();
         Task memConsume = new Task();
         Resource memres = new Resource(1,1);
         memConsume.setTaskId("12121");
@@ -191,7 +192,11 @@ public class TaskTransUtil {
         System.out.println(gson.toJson(memConsume));
         String s = "{\"taskId\":\"12121\",\"resourceRequests\":{\"cores\":1,\"RAM\":1,\"localDiskSpace\":0,\"scps\":0.0},\"jarPath\":\"/home/zongzan/Jobsubmitter/tasks/assembly/memorycore\",\"taskJarLen\":23434,\"taskJarTimestamp\":133223,\"taskJarLocation\":\"hdfs:/root/a\",\"nextTask\":\"\",\"execSequence\":0,\"priority\":0}";
 
-        System.out.println(getTask(s).getJarPath());
+        System.out.println(getTask(s).getJarPath());*/
+
+        long starttime =0;
+        starttime = Long.parseLong("1253663");
+        System.out.println(starttime*11);
 
     }
 

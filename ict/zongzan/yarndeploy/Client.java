@@ -525,7 +525,7 @@ public class Client {
                 }
             }
         }
-        // 把消耗内存程序加进来
+        // 把消耗内存程序加载到hdfs
         Task memConsume = new Task();
         ict.zongzan.scheduler.Resource memres = new ict.zongzan.scheduler.Resource(1,1);
         memConsume.setTaskId("-1");

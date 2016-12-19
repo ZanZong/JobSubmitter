@@ -96,6 +96,8 @@ public class JobLoader {
                             job.setDescription(content);            break;
                         case "priority":
                             priority = Integer.parseInt(content);   break;
+                        case "starttime":
+                            job.setStarttime(content);              break;
                         case "tasks": {
                             // getChild
                             // 这样得到的一定是Element
