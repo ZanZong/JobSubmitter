@@ -229,6 +229,10 @@ public class ApplicationMaster {
     Map<String, Integer> totalTaskNumOfSet = new HashMap<>();
     //Map: 用来唤醒等待该set完成的Scheduler线程
     Map<String, TaskSet> wakeUp = new HashMap<>();
+    // 当前总的已被提交到taskset的task数, 不包括在sleep中等待提交的
+    int totalSubmittedTaskNum = 0;
+    // 多分配的container
+    Set badContaier = new HashSet<String>();
 
     // Timeline Client
     @VisibleForTesting
@@ -524,7 +528,7 @@ public class ApplicationMaster {
                 response.getContainersFromPreviousAttempts();
         LOG.info(appAttemptID + " received " + previousAMRunningContainers.size()
                 + " previous attempts' running containers on AM registration.");
-        numAllocatedContainers.addAndGet(previousAMRunningContainers.size());//总共分配了多少
+        //numAllocatedContainers.addAndGet(previousAMRunningContainers.size());//总共分配了多少
 
        /* int numTotalContainersToRequest =
                 numTotalContainers - previousAMRunningContainers.size();*/
@@ -661,6 +665,13 @@ public class ApplicationMaster {
         public void onContainersCompleted(List<ContainerStatus> completedContainers) {
             LOG.info("onContainersCompleted:Got response from RM for container ask, completedCnt="
                     + completedContainers.size());
+            LOG.info("\n\n---numRequestedContainers---" + numRequestedContainers.get() +
+                    "--numRealAllocContainer--" + numAllocatedContainers.get() +
+                    "--numCompletedContainers--" + numCompletedContainers.get() +
+                    "--task remain in set--" + taskQueuePool.get(0).size() +
+                    "--totalSubmittedTasks--" + totalSubmittedTaskNum +
+                    "--badContainerNum--" + badContaier.size() + "\n");
+
             for (ContainerStatus containerStatus : completedContainers) {
                 LOG.info(appAttemptID + " got container status for containerID="
                         + containerStatus.getContainerId() + ", state="
@@ -764,7 +775,6 @@ public class ApplicationMaster {
 
                 LOG.info("Got response from RM for container ask, allocatedCnt="
                         + allocatedContainers.size());
-                numAllocatedContainers.addAndGet(allocatedContainers.size());
                 for (Container allocatedContainer : allocatedContainers) {
                     LOG.info("Allocated a new container and run a new task in queue"
                             + ", containerId=" + allocatedContainer.getId()
@@ -778,13 +788,14 @@ public class ApplicationMaster {
                             + ", containerToken="
                             + allocatedContainer.getContainerToken().getIdentifier().toString()
                     + ", contaierPriority=" + allocatedContainer.getPriority().toString());
-
+                    numAllocatedContainers.addAndGet(1);
                     // 从队列里取一个task,并从中删除
                 LinkedList<Task> taskQueue = taskQueuePool.get(Integer.parseInt(allocatedContainer.getPriority().toString()));
                 Task t = taskQueue.poll();
                 if(t == null){
                     // 如果取不到，说明没有task申请Container
                     LOG.info("Task queue is empty, abandon this container.");
+                    badContaier.add(allocatedContainer.getId());
                     return;
                 }
                 LaunchContainerRunnable runnableLaunchContainer =
@@ -883,6 +894,7 @@ public class ApplicationMaster {
                     amRMClient.addContainerRequest(containerAsk);
                     // 放到taskpool，onAllocate时取出来
                     LinkedList<Task> taskQueue = taskQueuePool.get(task.getPriority());
+                    totalSubmittedTaskNum++;
                     if(taskQueue == null) {
                         // 新建队列
                         taskQueue = new LinkedList();
@@ -893,8 +905,9 @@ public class ApplicationMaster {
                         // 直接插入
                         taskQueue.offer(task);
                     }
-
+                    LOG.info("\n\n-----------------print task queue size:" + taskQueue.size() + "\n");
                 }
+
                 LOG.info("Run Scheduler Thread, execute tasks in taskset, tasksetid = " + taskSet.getSetId());
                 // 等待这个set运行完，在complete方法中唤醒
                 if (cmpltTaskNumOfSet.get(taskSet.getSetId()) !=

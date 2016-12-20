@@ -2,10 +2,7 @@ package ict.zongzan.util;
 
 import ict.zongzan.scheduler.Task;
 
-import java.io.BufferedReader;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.util.*;
 
 /**
@@ -99,13 +96,29 @@ public class LogAnalysis {
         //输出
         System.out.println("num\ttaskTag\t\tcontainerId\t\t\tpriority\tstarttime\tendtime");
         Set<String> keySet =  taskInfo.keySet();
-        Iterator<String> iterator = keySet.iterator();
+        Object[] keyList = keySet.toArray();
+        ArrayList<String> sortList = new ArrayList<>();
+        for(Object obj : keyList){
+            sortList.add(obj.toString());
+        }
+        Collections.sort(sortList, new Comparator<Object>() {
+
+            @Override
+            public int compare(Object o1, Object o2) {
+                String key1 = o1.toString().split("_")[0];
+                String key2 = o2.toString().split("_")[0];
+                if(Integer.parseInt(key1) > Integer.parseInt(key2))
+                    return 1;
+                else
+                    return -1;
+
+            }
+        });
+
+
         int count = 0;
-        while (iterator.hasNext()) {
-            String key = iterator.next();
+        for(String key : sortList) {
             System.out.println(count++ + "\t" + key + "-->" + taskInfo.get(key) + "\t" + endInfo.get(key));
         }
-
-
     }
 }

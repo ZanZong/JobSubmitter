@@ -753,11 +753,11 @@ public class Client {
                 return false;
             }
 
-            if (System.currentTimeMillis() > (clientStartTime + clientTimeout)) {
+            /*if (System.currentTimeMillis() > (clientStartTime + clientTimeout)) {
                 LOG.info("Reached client specified timeout for application. Killing application");
                 forceKillApplication(appId);
                 return false;
-            }
+            }*/
         }
 
     }
