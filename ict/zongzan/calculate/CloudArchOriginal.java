@@ -6,11 +6,10 @@ package ict.zongzan.calculate;
  * Created by Zongzan on 2016/12/18.
  */
 public class CloudArchOriginal {
-    // 这里记录的是每个文件循环10000次所需的时间
-    public static final String core1_new = "12.21" ;
+
 
     public static long getloops(double csps, int cores) {
         double dura = csps / (double) cores;
-        return (long)(dura * 700);
+        return (long)(dura * 450);
     }
 }

@@ -2,6 +2,8 @@ package ict.zongzan.util;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.*;
 
 /**
  * 当job数量众多时，配置比较麻烦，使用该程序生成脚本
@@ -37,11 +39,13 @@ public class GenerateJobXML {
     }
 
     public static void main(String[] args){
-        GenerateJobXML generateJobXML = new GenerateJobXML("D:\\job.xml");
-        generateJobXML.generate();
+        /*GenerateJobXML generateJobXML = new GenerateJobXML("D:\\job.xml");
+        generateJobXML.generate();*/
+
+
     }
 
     class JobModel{
-        
+
     }
 }

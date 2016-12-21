@@ -471,7 +471,7 @@ public class ApplicationMaster {
 
         //创建AMRMClientAsync对象，负责与RM交互，第一个参数是时间间隔,time/ms,心跳包间隔？
         AMRMClientAsync.CallbackHandler allocListener = new RMCallbackHandler();
-        amRMClient = AMRMClientAsync.createAMRMClientAsync(1000, allocListener);//将回调方法告诉了RM
+        amRMClient = AMRMClientAsync.createAMRMClientAsync(500, allocListener);//将回调方法告诉了RM
         amRMClient.init(conf);
         amRMClient.start();
 
@@ -585,8 +585,14 @@ public class ApplicationMaster {
         LOG.info("Come to finish(). Wait all thread done.");
 
         while ((numCompletedContainers.get() != numTotalContainers)) {
+            LOG.info("\n\n---numRequestedContainers---" + numRequestedContainers.get() +
+                    "--numRealAllocContainer--" + numAllocatedContainers.get() +
+                    "--numCompletedContainers--" + numCompletedContainers.get() +
+                    "--task remain in set--" + taskQueuePool.get(0).size() +
+                    "--totalSubmittedTasks--" + totalSubmittedTaskNum +
+                    "--badContainerNum--" + badContaier.size() + "\n");
             try {
-            Thread.sleep(1000);
+            Thread.sleep(2000);
         } catch (InterruptedException ex) {
                 ex.printStackTrace();
         }
@@ -665,13 +671,6 @@ public class ApplicationMaster {
         public void onContainersCompleted(List<ContainerStatus> completedContainers) {
             LOG.info("onContainersCompleted:Got response from RM for container ask, completedCnt="
                     + completedContainers.size());
-            LOG.info("\n\n---numRequestedContainers---" + numRequestedContainers.get() +
-                    "--numRealAllocContainer--" + numAllocatedContainers.get() +
-                    "--numCompletedContainers--" + numCompletedContainers.get() +
-                    "--task remain in set--" + taskQueuePool.get(0).size() +
-                    "--totalSubmittedTasks--" + totalSubmittedTaskNum +
-                    "--badContainerNum--" + badContaier.size() + "\n");
-
             for (ContainerStatus containerStatus : completedContainers) {
                 LOG.info(appAttemptID + " got container status for containerID="
                         + containerStatus.getContainerId() + ", state="
@@ -1036,9 +1035,9 @@ public class ApplicationMaster {
                 long loops = CloudArchOriginal.getloops(task.getResourceRequests().getScps(),
                                     task.getResourceRequests().getCores());
                 int time =(int) task.getResourceRequests().getScps() / task.getResourceRequests().getCores();
-                shellCommand = "./memorycore " + task.getResourceRequests().getRAM() + " " + time + " &";
-                shellArgs = "time for((a=0;a<" + loops + ";a++));do ./"
-                        + TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";
+                shellCommand = "./memorycore " + task.getResourceRequests().getRAM() + " " + time /*+ " &"*/;
+               /* shellArgs = "time for((a=0;a<" + loops + ";a++));do ./"
+                        + TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";*/
             }
             //shellCommand = linux_bash_command;
             //vargs.add(shellCommand);
