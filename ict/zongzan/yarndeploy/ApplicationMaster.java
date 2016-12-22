@@ -471,7 +471,7 @@ public class ApplicationMaster {
 
         //创建AMRMClientAsync对象，负责与RM交互，第一个参数是时间间隔,time/ms,心跳包间隔？
         AMRMClientAsync.CallbackHandler allocListener = new RMCallbackHandler();
-        amRMClient = AMRMClientAsync.createAMRMClientAsync(500, allocListener);//将回调方法告诉了RM
+        amRMClient = AMRMClientAsync.createAMRMClientAsync(1000, allocListener);//将回调方法告诉了RM
         amRMClient.init(conf);
         amRMClient.start();
 
@@ -545,7 +545,7 @@ public class ApplicationMaster {
             schedulerThreads.add(st);
         }
 
-        numRequestedContainers.set(numTotalContainers);
+        //numRequestedContainers.set(numTotalContainers);
 
     }
 
@@ -588,11 +588,15 @@ public class ApplicationMaster {
             LOG.info("\n\n---numRequestedContainers---" + numRequestedContainers.get() +
                     "--numRealAllocContainer--" + numAllocatedContainers.get() +
                     "--numCompletedContainers--" + numCompletedContainers.get() +
-                    "--task remain in set--" + taskQueuePool.get(0).size() +
+                    "--task remain in set0--" + taskQueuePool.get(0).size() +
                     "--totalSubmittedTasks--" + totalSubmittedTaskNum +
                     "--badContainerNum--" + badContaier.size() + "\n");
+            if(totalSubmittedTaskNum == taskQueuePool.get(0).size() + numCompletedContainers.get()){
+                ContainerRequest containerAsk = setupContainerAskForRM(taskQueuePool.get(0).peek());
+                amRMClient.addContainerRequest(containerAsk);
+            }
             try {
-            Thread.sleep(2000);
+            Thread.sleep(1000);
         } catch (InterruptedException ex) {
                 ex.printStackTrace();
         }
@@ -615,7 +619,7 @@ public class ApplicationMaster {
                 e.printStackTrace();
             }
         }
-        for(Thread st : schedulerThreads) {
+      /*  for(Thread st : schedulerThreads) {
             try {
                 st.join(10000);
             } catch (InterruptedException e) {
@@ -623,7 +627,7 @@ public class ApplicationMaster {
                 e.printStackTrace();
             }
         }
-
+*/
         // 结束container，向RM发送通知
         LOG.info("Application completed. Stopping running containers");
 
@@ -677,6 +681,14 @@ public class ApplicationMaster {
                         + containerStatus.getState() + ", exitStatus="
                         + containerStatus.getExitStatus() + ", diagnostics="
                         + containerStatus.getDiagnostics());
+                if(badContaier.contains(containerStatus.getContainerId())){
+                    LOG.info("A bad container complete.");
+                    if (timelineClient != null) {
+                        publishContainerEndEvent(
+                                timelineClient, containerStatus, domainId, appSubmitterUgi);
+                    }
+                    return;
+                }
                 // 增加计数
                 String tag = ctMap.get(containerStatus.getContainerId().toString());
                 String taskid = tag.split("_")[1];
@@ -789,12 +801,17 @@ public class ApplicationMaster {
                     + ", contaierPriority=" + allocatedContainer.getPriority().toString());
                     numAllocatedContainers.addAndGet(1);
                     // 从队列里取一个task,并从中删除
-                LinkedList<Task> taskQueue = taskQueuePool.get(Integer.parseInt(allocatedContainer.getPriority().toString()));
-                Task t = taskQueue.poll();
+                    Task t = null;
+                    synchronized (taskQueuePool) {
+                    LinkedList<Task> taskQueue = taskQueuePool.get(Integer.parseInt(allocatedContainer.getPriority().toString()));
+                    t = taskQueue.poll();
+                }
                 if(t == null){
                     // 如果取不到，说明没有task申请Container
                     LOG.info("Task queue is empty, abandon this container.");
                     badContaier.add(allocatedContainer.getId());
+                    // release放掉
+                    amRMClient.releaseAssignedContainer(allocatedContainer.getId());
                     return;
                 }
                 LaunchContainerRunnable runnableLaunchContainer =
@@ -879,6 +896,7 @@ public class ApplicationMaster {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+
             // 提交container申请
             int i = 0;
             int taskSetsSize = schedule.taskSetsSize();
@@ -889,20 +907,23 @@ public class ApplicationMaster {
                 while(iterator.hasNext()) {
                     Task task = iterator.next();
                     // 添加到container等待队列，下面三句是否要加锁？
-                    ContainerRequest containerAsk = setupContainerAskForRM(task);
-                    amRMClient.addContainerRequest(containerAsk);
-                    // 放到taskpool，onAllocate时取出来
-                    LinkedList<Task> taskQueue = taskQueuePool.get(task.getPriority());
-                    totalSubmittedTaskNum++;
-                    if(taskQueue == null) {
-                        // 新建队列
-                        taskQueue = new LinkedList();
-                        taskQueue.offer(task);
-                        taskQueuePool.put(task.getPriority(), taskQueue);
-                    }
-                    else {
-                        // 直接插入
-                        taskQueue.offer(task);
+                    LinkedList<Task> taskQueue = null;
+                    synchronized (taskQueuePool){
+                        ContainerRequest containerAsk = setupContainerAskForRM(task);
+                        amRMClient.addContainerRequest(containerAsk);
+                        // 放到taskpool，onAllocate时取出来
+                        taskQueue = taskQueuePool.get(task.getPriority());
+                        totalSubmittedTaskNum++;
+                        if(taskQueue == null) {
+                            // 新建队列
+                            taskQueue = new LinkedList();
+                            taskQueue.offer(task);
+                            taskQueuePool.put(task.getPriority(), taskQueue);
+                        }
+                        else {
+                            // 直接插入
+                            taskQueue.offer(task);
+                        }
                     }
                     LOG.info("\n\n-----------------print task queue size:" + taskQueue.size() + "\n");
                 }
@@ -1035,9 +1056,9 @@ public class ApplicationMaster {
                 long loops = CloudArchOriginal.getloops(task.getResourceRequests().getScps(),
                                     task.getResourceRequests().getCores());
                 int time =(int) task.getResourceRequests().getScps() / task.getResourceRequests().getCores();
-                shellCommand = "./memorycore " + task.getResourceRequests().getRAM() + " " + time /*+ " &"*/;
-               /* shellArgs = "time for((a=0;a<" + loops + ";a++));do ./"
-                        + TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";*/
+                shellCommand = "./memorycore " + task.getResourceRequests().getRAM() + " " + time + " &";
+                shellArgs = "time for((a=0;a<" + loops + ";a++));do ./" +
+                        TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";
             }
             //shellCommand = linux_bash_command;
             //vargs.add(shellCommand);
@@ -1134,7 +1155,7 @@ public class ApplicationMaster {
 
         @Override
         public void onStartContainerError(ContainerId containerId, Throwable t) {
-            LOG.error("Failed to start Container " + containerId);
+            LOG.error("Failed to start Container " + containerId + " Exception:" + t.getMessage());
             containers.remove(containerId);
             applicationMaster.numCompletedContainers.incrementAndGet();
             applicationMaster.numFailedContainers.incrementAndGet();
@@ -1171,6 +1192,7 @@ public class ApplicationMaster {
 
         ContainerRequest request = new ContainerRequest(capability, null, null,
                 pri);
+        numRequestedContainers.addAndGet(1);
         LOG.info("Requested container ask: " + request.toString());
         return request;
     }
