@@ -469,7 +469,7 @@ public class ApplicationMaster {
                 UserGroupInformation.createRemoteUser(appSubmitterUserName);
         appSubmitterUgi.addCredentials(credentials);
 
-        //创建AMRMClientAsync对象，负责与RM交互，第一个参数是时间间隔,time/ms,心跳包间隔？
+        //创建AMRMClientAsync对象，负责与RM交互，第一个参数是时间间隔,time/ms,心跳包间隔
         AMRMClientAsync.CallbackHandler allocListener = new RMCallbackHandler();
         amRMClient = AMRMClientAsync.createAMRMClientAsync(1000, allocListener);//将回调方法告诉了RM
         amRMClient.init(conf);
@@ -506,22 +506,6 @@ public class ApplicationMaster {
 
         int maxVCores = response.getMaximumResourceCapability().getVirtualCores();
         LOG.info("Max vcores capabililty of resources in this cluster " + maxVCores);
-
-        // A resource ask cannot exceed the max.
-        // 先不做检验
-        /*if (containerMemory > maxMem) {
-          LOG.info("Container memory specified above max threshold of cluster."
-              + " Using max value." + ", specified=" + containerMemory + ", max="
-              + maxMem);
-          containerMemory = maxMem;
-        }
-
-        if (containerVirtualCores > maxVCores) {
-          LOG.info("Container virtual cores specified above max threshold of cluster."
-              + " Using max value." + ", specified=" + containerVirtualCores + ", max="
-              + maxVCores);
-          containerVirtualCores = maxVCores;
-        }*/
 
         // 向RM请求Container
         List<Container> previousAMRunningContainers =
@@ -585,21 +569,39 @@ public class ApplicationMaster {
         LOG.info("Come to finish(). Wait all thread done.");
 
         while ((numCompletedContainers.get() != numTotalContainers)) {
-            LOG.info("\n\n---numRequestedContainers---" + numRequestedContainers.get() +
+
+            // 如果没有已经在运行的container，则给task剩余多的队列申请
+            // 和yarn的机制有关，contianer分配不及时
+            Iterator<Integer> keys =  taskQueuePool.keySet().iterator();
+            int maxSet = 0;
+            int tmp = 0;
+            while(keys.hasNext()){
+                int i = keys.next();
+                if(taskQueuePool.get(i).size() > tmp){
+                    tmp = taskQueuePool.get(i).size();
+                    maxSet = i;
+                }
+            }
+            // task队列没有作业，说明没有作业滞留，不需要申请container
+            if(taskQueuePool.get(maxSet).size() != 0 &&
+                    totalSubmittedTaskNum == taskQueuePool.get(maxSet).size() + numCompletedContainers.get()){
+                ContainerRequest containerAsk = setupContainerAskForRM(taskQueuePool.get(maxSet).peek());
+                amRMClient.addContainerRequest(containerAsk);
+                LOG.info("Request container again for remain tasks.");
+            }
+
+            LOG.info("\n---numRequestedContainers---" + numRequestedContainers.get() +
                     "--numRealAllocContainer--" + numAllocatedContainers.get() +
                     "--numCompletedContainers--" + numCompletedContainers.get() +
                     "--task remain in set0--" + taskQueuePool.get(0).size() +
                     "--totalSubmittedTasks--" + totalSubmittedTaskNum +
                     "--badContainerNum--" + badContaier.size() + "\n");
-            if(totalSubmittedTaskNum == taskQueuePool.get(0).size() + numCompletedContainers.get()){
-                ContainerRequest containerAsk = setupContainerAskForRM(taskQueuePool.get(0).peek());
-                amRMClient.addContainerRequest(containerAsk);
-            }
+
             try {
             Thread.sleep(1000);
-        } catch (InterruptedException ex) {
+            } catch (InterruptedException ex) {
                 ex.printStackTrace();
-        }
+            }
         }
 
         if (timelineClient != null) {
@@ -695,8 +697,6 @@ public class ApplicationMaster {
                 String jobid = tag.split("_")[0];
                 Task task = TaskTransUtil.getTaskById(taskid, tasksMap.get(jobid));
 
-                /*LOG.info("\n\n" + " Completed task id=" + taskid + ", jobid=" + jobid
-                        + " <=====> containerId=" + containerStatus.getContainerId().toString() + "\n");*/
                 // 供日志解析
                 LOG.info("\n" + DSConstants.TASKEND + ",TASKTAG=" + jobid + "_" + taskid
                         + ",TIMESTAMP=" + System.currentTimeMillis() + "\n");
@@ -711,12 +711,6 @@ public class ApplicationMaster {
                     preNum = cmpltTaskNumOfSet.get(setid);
                     cmpltTaskNumOfSet.put(setid, ++preNum);
 
-
-                    LOG.info("\n\n----zongzan---" +
-                            " taskid = " + taskid +
-                            ",sequence = " + seq +
-                            ",has complete num = " + preNum +
-                            ",total num = " + totalTaskNumOfSet.get(setid) + "\n");
                     //唤醒
                     synchronized (wakeUp.get(setid)) {
                         if (preNum == totalTaskNumOfSet.get(setid)){
@@ -724,7 +718,11 @@ public class ApplicationMaster {
                             LOG.info("Wake up the scheduler thread");
                         }
                     }
-
+                    /*LOG.info("\n\n----zongzan---" +
+                            " taskid = " + taskid +
+                            ",sequence = " + seq +
+                            ",has complete num = " + preNum +
+                            ",total num = " + totalTaskNumOfSet.get(setid) + "\n");*/
                 }
                 else{
                     LOG.info("\n\n----zongzan---" +
@@ -925,7 +923,7 @@ public class ApplicationMaster {
                             taskQueue.offer(task);
                         }
                     }
-                    LOG.info("\n\n-----------------print task queue size:" + taskQueue.size() + "\n");
+                   // LOG.info("\n\n-----------------print task queue size:" + taskQueue.size() + "\n");
                 }
 
                 LOG.info("Run Scheduler Thread, execute tasks in taskset, tasksetid = " + taskSet.getSetId());

@@ -31,7 +31,7 @@ public class TaskTransUtil {
      * 参数是通过Client以json格式传过来的
      * 该函数解析String获得task对象
      * @param taskString
-     * @return Task
+     * @return Task         Abandon
      */
     public static Task getTask(String taskString) throws IllegalArgumentException{
         Gson gson = new Gson();
@@ -50,20 +50,20 @@ public class TaskTransUtil {
             }
             else{
                 task.setTaskId(jsonObject.get(DSConstants.TASKID).getAsString());
-                //task.setJobId(jsonObject.get(DSConstants.JOBID).getAsString());
+                task.setJobId(jsonObject.get(DSConstants.JOBID).getAsString());
                 task.setJarPath(jsonObject.get(DSConstants.JARPATH).getAsString());
                 task.setTaskJarLen(jsonObject.get(DSConstants.TASKJARLEN).getAsLong());
                 task.setTaskJarLocation(jsonObject.get(DSConstants.TASKJARLOCATIOIN).getAsString());
                 task.setTaskJarTimestamp(jsonObject.get(DSConstants.TASKJARTIMESTAMP).getAsLong());
-                //task.setPriority(jsonObject.get(DSConstants.PRIORITY).getAsInt());
-                //task.setNextTask(jsonObject.get(DSConstants.NEXTTASK).getAsString());
-                //task.setExecSequence(jsonObject.get(DSConstants.EXECSEQUENCE).getAsInt());
+                task.setPriority(jsonObject.get(DSConstants.PRIORITY).getAsInt());
+                task.setNextTask(jsonObject.get(DSConstants.NEXTTASK).getAsString());
+                task.setExecSequence(jsonObject.get(DSConstants.EXECSEQUENCE).getAsInt());
 
-                //Resource r = new Resource(resourceObject.get(DSConstants.CORES).getAsInt(),
-                //        resourceObject.get(DSConstants.RAM).getAsInt(),
-                //        resourceObject.get(DSConstants.LOCALDISKSPACE).getAsInt(),
-                //        resourceObject.get(DSConstants.SCPS).getAsDouble());
-                //task.setResourceRequests(r);
+                Resource r = new Resource(resourceObject.get(DSConstants.CORES).getAsInt(),
+                        resourceObject.get(DSConstants.RAM).getAsInt(),
+                        resourceObject.get(DSConstants.LOCALDISKSPACE).getAsInt(),
+                        resourceObject.get(DSConstants.SCPS).getAsDouble());
+                task.setResourceRequests(r);
             }
         }
         else{
@@ -154,6 +154,16 @@ public class TaskTransUtil {
             return "ERROR";
     }
 
+    public static String getFilePath(String URI){
+        StringBuilder sb = new StringBuilder();
+        String[] tmp = URI.split("/");
+        int size =  tmp.length;
+        for(int i = 0 ; i < size - 1; i++){
+            sb.append(tmp[i] + '/');
+        }
+        return sb.toString();
+    }
+
     public static void getTaskByPriority(int priority) {
         Job job = jobFactory();
 
@@ -193,11 +203,6 @@ public class TaskTransUtil {
         String s = "{\"taskId\":\"12121\",\"resourceRequests\":{\"cores\":1,\"RAM\":1,\"localDiskSpace\":0,\"scps\":0.0},\"jarPath\":\"/home/zongzan/Jobsubmitter/tasks/assembly/memorycore\",\"taskJarLen\":23434,\"taskJarTimestamp\":133223,\"taskJarLocation\":\"hdfs:/root/a\",\"nextTask\":\"\",\"execSequence\":0,\"priority\":0}";
 
         System.out.println(getTask(s).getJarPath());*/
-
-        long starttime =0;
-        starttime = Long.parseLong("1253663");
-        System.out.println(starttime*11);
-
     }
 
 }

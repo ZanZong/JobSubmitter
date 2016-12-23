@@ -527,16 +527,21 @@ public class Client {
         }
         // 把消耗内存程序加载到hdfs
         Task memConsume = new Task();
-        ict.zongzan.scheduler.Resource memres = new ict.zongzan.scheduler.Resource(1,1);
-        memConsume.setTaskId("-1");
-        memConsume.setResourceRequests(memres);
-        memConsume.setJarPath("/home/zongzan/Jobsubmitter/tasks/assembly/memorycore");
-        addRescToContainer(fs, memConsume, appId.toString());
-        /*// old
-        for(Task task : job.getTasks()){
-            addRescToContainer(fs, task, appId.toString());
-        }*/
-
+        if(taskType.equals("assembly")){
+            // 把消耗内存程序加载到hdfs
+            String memFilePath = "";
+            try {
+                memFilePath = jobs.get(0).getTasks().get(0).getJarPath();
+            } catch (Exception e){
+                e.printStackTrace();
+                LOG.info("Get memorycore file path error, don't have correct jobs loaded.");
+            }
+            ict.zongzan.scheduler.Resource memres = new ict.zongzan.scheduler.Resource(1,1);
+            memConsume.setTaskId("-1");
+            memConsume.setResourceRequests(memres);
+            memConsume.setJarPath(TaskTransUtil.getFilePath(memFilePath) + "memorycore");
+            addRescToContainer(fs, memConsume, appId.toString());
+        }
         // Set the necessary security tokens as needed
         //amContainer.setContainerTokens(containerToken);
 
@@ -555,8 +560,7 @@ public class Client {
             env.put(job.getJobId(), gson.toJson(job));
             LOG.info("Transtion Job, jobId=" + job.getJobId());
         }
-        // memorycore文件的信息传到AM,传过去不带双引号，无法解析
-        //env.put(DSConstants.MEMCONSUME, gson.toJson(memConsume));
+        // memorycore文件的信息传到AM
         String memInfo = memConsume.getTaskJarLocation()+";"+memConsume.getTaskJarLen()+";"+memConsume.getTaskJarTimestamp();
         env.put(DSConstants.MEMCONSUME, memInfo);
         //set task type
@@ -575,8 +579,6 @@ public class Client {
             classPathEnv.append(ApplicationConstants.CLASS_PATH_SEPARATOR);
             classPathEnv.append(c.trim());
         }
-        /*classPathEnv.append(ApplicationConstants.CLASS_PATH_SEPARATOR).append(
-                "./log4j.properties");*/
 
         // add the runtime classpath needed for tests to work
         if (conf.getBoolean(YarnConfiguration.IS_MINI_YARN_CLUSTER, false)) {
@@ -588,7 +590,7 @@ public class Client {
 
         // 设置运行参数
         Vector<CharSequence> vargs = new Vector<CharSequence>(30);
-
+        // Set params for Application Master
         // Set java executable command
         LOG.info("Setting up app master command");
         vargs.add(Environment.JAVA_HOME.$$() + "/bin/java");
@@ -596,11 +598,8 @@ public class Client {
         vargs.add("-Xmx" + amMemory + "m");
         // Set class name
         vargs.add(appMasterMainClass);
-        // Set params for Application Master
-        /*vargs.add("--container_memory " + String.valueOf(containerMemory));
-        vargs.add("--container_vcores " + String.valueOf(containerVirtualCores));
-        vargs.add("--num_containers " + String.valueOf(numContainers));*/
-            if (null != nodeLabelExpression) {
+
+        if (null != nodeLabelExpression) {
             appContext.setNodeLabelExpression(nodeLabelExpression);
         }
         vargs.add("--priority " + String.valueOf(shellCmdPriority));
