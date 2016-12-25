@@ -761,21 +761,6 @@ public class ApplicationMaster {
                 }
 
             }
-
-                // Container执行失败，重新申请执行该task
-                 /* int askCount = numTotalContainers - numRequestedContainers.get();
-                  numRequestedContainers.addAndGet(askCount);
-
-                  if (askCount > 0) {
-                    for (int i = 0; i < askCount; ++i) {
-                      ContainerRequest containerAsk = setupContainerAskForRM();
-                      amRMClient.addContainerRequest(containerAsk);
-                    }
-                  }
-
-                  if (numCompletedContainers.get() == numTotalContainers) {
-                    done = true;
-                  }*/
         }
 
         @Override
