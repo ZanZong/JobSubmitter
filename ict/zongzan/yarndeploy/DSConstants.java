@@ -37,6 +37,7 @@ public class DSConstants {
     public static final String TASKNUM = "TASKNUM";
     public static final String TASKIDSTRING = "TASKIDSTRING";
     public static final String TASKTYPE = "TASKTYPE";
+    public static final String CUTTIME = "CUTTIME";
 
     //分号当字符串分隔符
     public static final String SPLIT = ";";

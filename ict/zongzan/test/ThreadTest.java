@@ -25,10 +25,12 @@ public class ThreadTest implements Runnable{
 
 
     public static void main(String[] args){
-        ThreadTest th1 = new ThreadTest(1, 1500);
+      /*  ThreadTest th1 = new ThreadTest(1, 1500);
         ThreadTest th2 = new ThreadTest(2, 2500);
         new Thread(th1).start();
-        new Thread(th2).start();
+        new Thread(th2).start();*/
+        long starttime = 330;
+        System.out.println(starttime/(double) 400);
 
     }
 }

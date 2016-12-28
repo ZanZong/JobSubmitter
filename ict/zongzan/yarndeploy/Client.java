@@ -89,12 +89,6 @@ public class Client {
     // Main class to invoke application master
     private final String appMasterMainClass;
 
-    /*// Shell command to be executed
-    private String shellCommand = "";
-    // Location of shell script
-    private String shellScriptPath = "";
-    // Args to be passed to the shell command
-    private String[] shellArgs = new String[] {};*/
     // Env variables to be setup for the shell command
     private Map<String, String> shellEnv = new HashMap<String, String>();
     // Shell Command Container priority
@@ -144,6 +138,10 @@ public class Client {
     private String jobXml = "";
     // task的类型，设计支持jar、shellscript、汇编、python脚本
     private String taskType = "";
+    // 当提交汇编程序时，想成倍的减少作运行的时间，可设置该参数
+    // e.g. cut_time=100,即工作负载运行时间变为原来1/100
+    // 当倍数比较大时，运行时间不是线性减小的
+    private String cutTime = "";
 
     // hadoop会将运行的jar包解压，按照一定的目录重新打包成包名如下的jar包
     private static final String appMasterJarPath = "AppMaster.jar";
@@ -214,6 +212,7 @@ public class Client {
         opts.addOption("task_type", true, "Set what kind of Job you want to run." +
                         " Java jar(jar), shell script(shellscript)," +
                 " c program(c-program), or assembly program(assembly).");
+        opts.addOption("cut_time", true, "Set workload time reduce multiple.");
     }
 
     /**
@@ -287,21 +286,6 @@ public class Client {
         //master的jar包本地路径是通过参数传进来的
         appMasterJar = cliParser.getOptionValue("jar");
 
-        /*if (!cliParser.hasOption("shell_command") && !cliParser.hasOption("shell_script")) {
-            throw new IllegalArgumentException(
-                    "No shell command or shell script specified to be executed by application master");
-        } else if (cliParser.hasOption("shell_command") && cliParser.hasOption("shell_script")) {
-            throw new IllegalArgumentException("Can not specify shell_command option " +
-                    "and shell_script option at the same time");
-        } else if (cliParser.hasOption("shell_command")) {
-            shellCommand = cliParser.getOptionValue("shell_command");
-        } else {
-            shellScriptPath = cliParser.getOptionValue("shell_script");
-        }
-        if (cliParser.hasOption("shell_args")) {
-            shellArgs = cliParser.getOptionValues("shell_args");
-        }*/
-
         if (cliParser.hasOption("shell_env")) {
             String envs[] = cliParser.getOptionValues("shell_env");
             for (String env : envs) {
@@ -324,10 +308,12 @@ public class Client {
         containerVirtualCores = Integer.parseInt(cliParser.getOptionValue("container_vcores", "1"));
         numContainers = Integer.parseInt(cliParser.getOptionValue("num_containers", "1"));
 
-        taskType = cliParser.getOptionValue("task_type");
+        taskType = cliParser.getOptionValue("task_type", "assembly");
         // 从配置文件加载job
         jobXml = cliParser.getOptionValue("job_xml");
-
+        if(taskType.equals("assembly")) {
+            cutTime = cliParser.getOptionValue("cut_time", "1");
+        }
         if(jobXml.equals("null")){
             LOG.error("Can't find job XML.");
         }
@@ -547,6 +533,7 @@ public class Client {
 
         // 设置AM运行所需的环境变量env
         LOG.info("Set the environment for the application master");
+        LOG.info("Task type:" + taskType + " cuttime" + cutTime);
         Map<String, String> env = new HashMap<String, String>();
         //set jobs
        // env.put(DSConstants.JOBNUM, String.valueOf(jobs.size()));
@@ -565,6 +552,10 @@ public class Client {
         env.put(DSConstants.MEMCONSUME, memInfo);
         //set task type
         env.put(DSConstants.TASKTYPE, taskType);
+        //set cuttime
+        if(taskType.equals("assembly")) {
+            env.put(DSConstants.CUTTIME, cutTime);
+        }
 
         if (domainId != null && domainId.length() > 0) {
             env.put(DSConstants.JOBSUBMITTERDOMAIN, domainId);
@@ -623,10 +614,6 @@ public class Client {
         LOG.info("Completed setting up app master command " + command.toString());
         List<String> commands = new ArrayList<String>();
         commands.add(command.toString());
-
-        //将需要执行的jar包加到ContainerCtx中
-       /* addToLocalResources(fs, "/home/zongzan/taskjar/YarnApp.jar", "YarnApp.jar",
-                appId.toString(), localResources, null);*/
 
         // 构造用于运行Application的Container
         // Container信息被封装到Context中

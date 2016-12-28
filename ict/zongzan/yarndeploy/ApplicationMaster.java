@@ -183,14 +183,12 @@ public class ApplicationMaster {
     private String shellArgs = "";
     // Env variables to be setup for the shell command
     private Map<String, String> shellEnv = new HashMap<String, String>();
+    // cuttime
+    private int cutTime = 1;
 
     // Location of shell script ( obtained from info set in env )
     // Shell script path in fs
     private String scriptPath = "";
-    // Timestamp needed for creating a local resource
-    private long shellScriptPathTimestamp = 0;
-    // File length needed for local resource
-    private long shellScriptPathLen = 0;
 
     //jobs
     private List<Job> jobs = new ArrayList();
@@ -411,8 +409,10 @@ public class ApplicationMaster {
             tasksMap.put(job.getJobId(), job.getTasks());
         }
 
-        // set task type
         taskType = envs.get(DSConstants.TASKTYPE);
+        if(taskType.equals("assembly")) {
+            cutTime = Integer.parseInt(envs.get(DSConstants.CUTTIME));
+        }
         LOG.info("TaskType = " + taskType + ",numTotalContainers:" + numTotalContainers);
         if (envs.containsKey(DSConstants.JOBSUBMITTERDOMAIN)) {
             domainId = envs.get(DSConstants.JOBSUBMITTERDOMAIN);
@@ -857,7 +857,7 @@ public class ApplicationMaster {
         Schedule schedule = null;
         List<Task> tasks = null;
         String jobId = "";
-        long starttime = 0;
+        double starttime = 0;
 
         public SchedulerThread(Job job) {
             if (job.getTasks().isEmpty()){
@@ -867,15 +867,16 @@ public class ApplicationMaster {
             this.tasks = job.getTasks();
             schedule = new Schedule(tasks);
             this.jobId = job.getJobId();
-            this.starttime = Long.parseLong(job.getStarttime());
+            this.starttime = Double.parseDouble(job.getStarttime());
         }
 
         @Override
         public void run() {
             // 等待starttime时间后，作业开始
             try {
+                starttime /= (double)cutTime;
                 LOG.info("Job=" + jobId + " is loaded, wait " + starttime + " seconds to be executed.");
-                Thread.sleep(starttime * 1000);
+                Thread.sleep((long)(starttime * 1000));
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -1038,8 +1039,11 @@ public class ApplicationMaster {
             else if (taskType.equals("assembly")) {
                 long loops = CloudArchOriginal.getloops(task.getResourceRequests().getScps(),
                                     task.getResourceRequests().getCores());
-                int time =(int) task.getResourceRequests().getScps() / task.getResourceRequests().getCores();
-                shellCommand = "./memorycore " + task.getResourceRequests().getRAM() + " " + time + " &";
+                loops /= cutTime;
+                double time = (double)task.getResourceRequests().getScps() / task.getResourceRequests().getCores();
+                time /= (double)cutTime;
+                time *= 1000;//参数的单位是ms
+                shellCommand = "./memorycore " + task.getResourceRequests().getRAM() + " " + (long)time + " &";
                 shellArgs = "time for((a=0;a<" + loops + ";a++));do ./" +
                         TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";
             }
