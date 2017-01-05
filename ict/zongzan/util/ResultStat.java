@@ -103,7 +103,7 @@ public class ResultStat {
             System.out.println((i + 1) + "\t" + avgRuntime.get(avgRuntimeList.get(i))
                     + "\t" + avgRuntimeList.get(i));
         }
-        System.out.println("top " + num + " of total wait time；");
+        System.out.println("top " + num + " of total wait time:");
         for(int i = 0; i < num; i++) {
             System.out.println((i + 1) + "\t" + totalWaittime.get(totalWaittimeList.get(i))
                     + "\t" +totalWaittimeList.get(i));

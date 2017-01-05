@@ -1,7 +1,5 @@
 package ict.zongzan.util;
 
-import ict.zongzan.scheduler.Task;
-
 import java.io.*;
 import java.util.*;
 
@@ -18,7 +16,7 @@ public class LogAnalysis {
     List<String> endList = new ArrayList<>();
     List<String> waitList = new ArrayList<>();
     // parse infomation from lines
-    Map<String, String> taskInfo = new HashMap<>();
+    Map<String, String> startInfo = new HashMap<>();
     Map<String, String> taskWait = new HashMap<>();
     Map<String, String> endInfo = new HashMap<>();
     private String workStart = "";
@@ -56,13 +54,14 @@ public class LogAnalysis {
      * 包括：总完成时间，平均job完成时间，总等待时间
      */
     void printInfo(){
-        long totalRuntime = Long.parseLong(workEnd) - Long.parseLong(workStart);
+        // get total runtime
+        long totalRuntime = getMaxtime(endInfo) - getMintime(startInfo);
         double avgTime= 0;
         double totalWaittime = 0;
         // get waitTime
-        Set<String> keySet = taskInfo.keySet();
+        Set<String> keySet = startInfo.keySet();
         for(String key : keySet){
-            long starttime = Long.parseLong(taskInfo.get(key).split("\t")[2]);
+            long starttime = Long.parseLong(startInfo.get(key).split("\t")[2]);
             long waittime = Long.parseLong(taskWait.get(key));
             totalWaittime += starttime - waittime;
         }
@@ -92,12 +91,12 @@ public class LogAnalysis {
                 else if (line.contains(waitTag)) {
                     waitList.add(line);
                 }
-                else if (line.contains("[WORKSTART]")) {
+                /*else if (line.contains("[WORKSTART]")) {
                     workStart = line.split(",")[1];
                 }
                 else if (line.contains("WORKEND")) {
                     workEnd = line.split(",")[1];
-                }
+                }*/
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -109,7 +108,7 @@ public class LogAnalysis {
                 e.printStackTrace();
             }
         }
-        System.out.println("startnum=" + startList.size() + " endnum=" + endList.size());
+        //System.out.println("startnum=" + startList.size() + " endnum=" + endList.size());
 
         for (String s : waitList) {
             String taskTag = "";
@@ -148,7 +147,7 @@ public class LogAnalysis {
                         priority = val[1];  break;
                 }
             }
-            taskInfo.put(taskTag, containerId + "\t" + priority  + "\t"+ timestamp);
+            startInfo.put(taskTag, containerId + "\t" + priority  + "\t"+ timestamp);
 
         }
 
@@ -170,7 +169,7 @@ public class LogAnalysis {
         }
         //输出
         System.out.println("num\ttaskTag\t\tcontainerId\t\t\tpriority\tstarttime\twaittime\tendtime");
-        Set<String> keySet = taskInfo.keySet();
+        Set<String> keySet = startInfo.keySet();
         Object[] keyList = keySet.toArray();
         ArrayList<String> sortList = new ArrayList<>();
         for(Object obj : keyList){
@@ -192,8 +191,27 @@ public class LogAnalysis {
 
         int count = 0;
         for(String key : sortList) {
-            System.out.println(count++ + "\t" + key + "-->" + taskInfo.get(key) + "\t" +
+            System.out.println(count++ + "\t" + key + "-->" + startInfo.get(key) + "\t" +
                     taskWait.get(key) + "\t" + endInfo.get(key));
         }
+    }
+
+    public long getMaxtime(Map<String, String> map) {
+        long time = 0;
+        for(String s : map.keySet()){
+            long t = Long.parseLong(map.get(s));
+            if(t > time)
+                time = t;
+        }
+        return time;
+    }
+    public long getMintime(Map<String, String> map) {
+        Long time = new Long("1903593275134");
+        for(String s : map.keySet()){
+            long t = Long.parseLong(map.get(s).split("\t")[2]);
+            if(t < time)
+                time = t;
+        }
+        return time;
     }
 }
