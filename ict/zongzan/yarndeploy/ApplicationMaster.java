@@ -519,6 +519,7 @@ public class ApplicationMaster {
 
         // 每个job使用单独的线程，循环向RM请求Container，直到所有所需的资源全部被请求到
         // 并循环启动所有的Container并执行程序，执行结果（success/failure）并不关心
+        LOG.info("\n[WORKSTART]," + System.currentTimeMillis());
         for(Job job : jobs){
             LOG.info("\n\n----zongzan--Launch job scheduler thread:jobid=" + job.getJobId()
                     + ", JobList Size=" + jobs.size()+",job:"+job);
@@ -570,40 +571,43 @@ public class ApplicationMaster {
 
         while ((numCompletedContainers.get() != numTotalContainers)) {
 
-            // 如果没有已经在运行的container，则给task剩余多的队列申请
-            // 和yarn的机制有关，contianer分配不及时
-            Iterator<Integer> keys =  taskQueuePool.keySet().iterator();
-            int maxSet = 0;
-            int tmp = 0;
-            while(keys.hasNext()){
-                int i = keys.next();
-                if(taskQueuePool.get(i).size() > tmp){
-                    tmp = taskQueuePool.get(i).size();
-                    maxSet = i;
+            if(!taskQueuePool.isEmpty()) {
+                // 如果没有已经在运行的container，则给task剩余多的队列申请
+                // 和yarn的机制有关，contianer分配不及时
+                Iterator<Integer> keys =  taskQueuePool.keySet().iterator();
+                int maxSet = 0;
+                int tmp = 0;
+                while(keys.hasNext()){
+                    int i = keys.next();
+                    if(taskQueuePool.get(i).size() > tmp){
+                        tmp = taskQueuePool.get(i).size();
+                        maxSet = i;
+                    }
                 }
-            }
-            // task队列没有作业，说明没有作业滞留，不需要申请container
-            if(taskQueuePool.get(maxSet).size() != 0 &&
-                    totalSubmittedTaskNum == taskQueuePool.get(maxSet).size() + numCompletedContainers.get()){
-                ContainerRequest containerAsk = setupContainerAskForRM(taskQueuePool.get(maxSet).peek());
-                amRMClient.addContainerRequest(containerAsk);
-                LOG.info("Request container again for remain tasks.");
-            }
+                LOG.info("Max setnum is:" + maxSet);
+                // task队列没有作业，说明没有作业滞留，不需要申请container
+                if(taskQueuePool.get(maxSet) != null && taskQueuePool.get(maxSet).size() != 0 &&
+                        totalSubmittedTaskNum == taskQueuePool.get(maxSet).size() + numCompletedContainers.get()){
+                    ContainerRequest containerAsk = setupContainerAskForRM(taskQueuePool.get(maxSet).peek());
+                    amRMClient.addContainerRequest(containerAsk);
+                    LOG.info("Request container again for remain tasks.");
+                }
+                /*LOG.info("\n---numRequestedContainers---" + numRequestedContainers.get() +
+                        "--numRealAllocContainer--" + numAllocatedContainers.get() +
+                        "--numCompletedContainers--" + numCompletedContainers.get() +
+                        "--task remain in maxset--" + taskQueuePool.get(maxSet).size() +
+                        "--totalSubmittedTasks--" + totalSubmittedTaskNum +
+                        "--badContainerNum--" + badContaier.size() + "\n");*/
 
-            LOG.info("\n---numRequestedContainers---" + numRequestedContainers.get() +
-                    "--numRealAllocContainer--" + numAllocatedContainers.get() +
-                    "--numCompletedContainers--" + numCompletedContainers.get() +
-                    "--task remain in set0--" + taskQueuePool.get(0).size() +
-                    "--totalSubmittedTasks--" + totalSubmittedTaskNum +
-                    "--badContainerNum--" + badContaier.size() + "\n");
+            }
 
             try {
-            Thread.sleep(1000);
+            Thread.sleep(500);
             } catch (InterruptedException ex) {
                 ex.printStackTrace();
             }
         }
-
+        LOG.info("\n[WORKEND]," + System.currentTimeMillis());
         if (timelineClient != null) {
             publishApplicationAttemptEvent(timelineClient, appAttemptID.toString(),
                     DSEvent.DS_APP_ATTEMPT_END, domainId, appSubmitterUgi);
@@ -874,13 +878,13 @@ public class ApplicationMaster {
         public void run() {
             // 等待starttime时间后，作业开始
             try {
-                starttime /= (double)cutTime;
+                //cuttime不准确
+                starttime /= 60.0 /*(d ouble)cutTime*/;
                 LOG.info("Job=" + jobId + " is loaded, wait " + starttime + " seconds to be executed.");
                 Thread.sleep((long)(starttime * 1000));
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-
             // 提交container申请
             int i = 0;
             int taskSetsSize = schedule.taskSetsSize();
@@ -909,7 +913,10 @@ public class ApplicationMaster {
                             taskQueue.offer(task);
                         }
                     }
-                   // LOG.info("\n\n-----------------print task queue size:" + taskQueue.size() + "\n");
+                    // 供日志解析
+                    LOG.info("\n" + DSConstants.TASKWAIT + ",TASKTAG=" + jobId + "_" + task.getTaskId()
+                            + ",TIMESTAMP=" + System.currentTimeMillis()
+                    );
                 }
 
                 LOG.info("Run Scheduler Thread, execute tasks in taskset, tasksetid = " + taskSet.getSetId());

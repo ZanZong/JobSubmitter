@@ -72,4 +72,5 @@ public class DSConstants {
     // 日志解析的时候，使用该tag，作行筛选
     public static final String TASKSTART = "[TASKSTART]";
     public static final String TASKEND = "[TASKEND]";
+    public static final String TASKWAIT = "[TASKWAIT]";
 }

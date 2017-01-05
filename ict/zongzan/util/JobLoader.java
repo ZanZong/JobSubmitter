@@ -185,8 +185,29 @@ public class JobLoader {
     }
 
      public static void main(String[] args) {
+         List<Job> jobs = new JobLoader("D://job.xml").getJobFromXML();
+         int[] count = {0,0,0,0,0,0,0};
+         for(Job job : jobs) {
+            Task t = job.getTasks().get(0);
+             double scps = t.getResourceRequests().getScps();
+             if(scps <= 50)
+                 count[0]++;
+             else if(scps <= 100)
+                 count[1]++;
+             else if(scps <= 150)
+                 count[2]++;
+             else if(scps <= 200)
+                 count[3]++;
+             else if(scps <= 250)
+                 count[4]++;
+             else if(scps <= 300)
+                 count[5]++;
+             else count[6]++;
+         }
+         for(int i = 0 ;i < 7; i++){
+             System.out.println(count[i]);
+         }
 
-        new JobLoader("D://job.xml").getJobFromXML();
     }
 
 
