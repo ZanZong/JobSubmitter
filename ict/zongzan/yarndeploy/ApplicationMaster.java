@@ -575,7 +575,7 @@ public class ApplicationMaster {
                 // 如果没有已经在运行的container，则给task剩余多的队列申请
                 // 和yarn的机制有关，contianer分配不及时
                 Iterator<Integer> keys =  taskQueuePool.keySet().iterator();
-                int maxSet = 0;
+                int maxSet = -1;
                 int tmp = 0;
                 while(keys.hasNext()){
                     int i = keys.next();
@@ -584,21 +584,24 @@ public class ApplicationMaster {
                         maxSet = i;
                     }
                 }
-                LOG.info("Max setnum is:" + maxSet);
-                // task队列没有作业，说明没有作业滞留，不需要申请container
-                if(taskQueuePool.get(maxSet) != null && taskQueuePool.get(maxSet).size() != 0 &&
-                        totalSubmittedTaskNum == taskQueuePool.get(maxSet).size() + numCompletedContainers.get()){
-                    ContainerRequest containerAsk = setupContainerAskForRM(taskQueuePool.get(maxSet).peek());
-                    amRMClient.addContainerRequest(containerAsk);
-                    LOG.info("Request container again for remain tasks.");
+                if (maxSet == -1) {
+                    LOG.info("All task set is empty");
                 }
-                /*LOG.info("\n---numRequestedContainers---" + numRequestedContainers.get() +
-                        "--numRealAllocContainer--" + numAllocatedContainers.get() +
-                        "--numCompletedContainers--" + numCompletedContainers.get() +
-                        "--task remain in maxset--" + taskQueuePool.get(maxSet).size() +
-                        "--totalSubmittedTasks--" + totalSubmittedTaskNum +
-                        "--badContainerNum--" + badContaier.size() + "\n");*/
-
+                else {
+                    LOG.info("Max setnum is:" + maxSet);
+                    // task队列没有作业，说明没有作业滞留，不需要申请container
+                    if(totalSubmittedTaskNum - (taskQueuePool.get(maxSet).size() + numCompletedContainers.get()) < 2){
+                        ContainerRequest containerAsk = setupContainerAskForRM(taskQueuePool.get(maxSet).peek());
+                        amRMClient.addContainerRequest(containerAsk);
+                        LOG.info("Request container again for remain tasks.");
+                    }
+                    LOG.info("\n---numRequestedContainers---" + numRequestedContainers.get() +
+                            "--numRealAllocContainer--" + numAllocatedContainers.get() +
+                            "--numCompletedContainers--" + numCompletedContainers.get() +
+                            "--task remain in maxset--" + taskQueuePool.get(maxSet).size() +
+                            "--totalSubmittedTasks--" + totalSubmittedTaskNum +
+                            "--badContainerNum--" + badContaier.size() + "\n");
+                }
             }
 
             try {
@@ -754,7 +757,6 @@ public class ApplicationMaster {
                 } else {*/
                     // container completed successfully
                     numCompletedContainers.incrementAndGet();
-
                     LOG.info("Container completed successfully." + ", containerId="
                             + containerStatus.getContainerId());
                // }
@@ -857,29 +859,34 @@ public class ApplicationMaster {
      *  现在的启动时无序的、平等的
      */
     private class SchedulerThread implements Runnable {
-        // 每个job都有一个单独的scheduler线程
-        Schedule schedule = null;
-        List<Task> tasks = null;
-        String jobId = "";
-        double starttime = 0;
+            // 每个job都有一个单独的scheduler线程
+            Schedule schedule = null;
+            List<Task> tasks = null;
+            String jobId = "";
+            double starttime = 0;
 
-        public SchedulerThread(Job job) {
-            if (job.getTasks().isEmpty()){
-                LOG.error("New scheduler thread error, tasks list is empty.");
-                return;
+            public SchedulerThread(Job job) {
+                if (job.getTasks().isEmpty()){
+                    LOG.error("New scheduler thread error, tasks list is empty.");
+                    return;
+                }
+                this.tasks = job.getTasks();
+                schedule = new Schedule(tasks);
+                this.jobId = job.getJobId();
+                this.starttime = Double.parseDouble(job.getStarttime());
             }
-            this.tasks = job.getTasks();
-            schedule = new Schedule(tasks);
-            this.jobId = job.getJobId();
-            this.starttime = Double.parseDouble(job.getStarttime());
-        }
 
         @Override
         public void run() {
             // 等待starttime时间后，作业开始
             try {
                 //cuttime不准确
-                starttime /= 60.0 /*(d ouble)cutTime*/;
+                if(cutTime == -1) {
+                    // do nothing
+                }
+                else {
+                    starttime /= (double) cutTime;
+                }
                 LOG.info("Job=" + jobId + " is loaded, wait " + starttime + " seconds to be executed.");
                 Thread.sleep((long)(starttime * 1000));
             } catch (InterruptedException e) {
@@ -1044,15 +1051,19 @@ public class ApplicationMaster {
                                     task.getResourceRequests().getCores());
             }
             else if (taskType.equals("assembly")) {
-                long loops = CloudArchOriginal.getloops(task.getResourceRequests().getScps(),
-                                    task.getResourceRequests().getCores());
-                loops /= cutTime;
+
                 double time = (double)task.getResourceRequests().getScps() / task.getResourceRequests().getCores();
-                time /= (double)cutTime;
+                if(cutTime == -1) {
+                    // do nothing,-1 is original
+                }
+                else {
+                    time /= (double)cutTime;
+                }
+                long loops = CloudArchOriginal.getloops(time, task.getResourceRequests().getCores());
                 time *= 1000;//参数的单位是ms
                 shellCommand = "./memorycore " + task.getResourceRequests().getRAM() + " " + (long)time + " &";
-                shellArgs = "time for((a=0;a<" + loops + ";a++));do ./" +
-                        TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";
+                /*shellArgs = "time for((a=0;a<" + loops + ";a++));do ./" +
+                        TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";*/
             }
             //shellCommand = linux_bash_command;
             //vargs.add(shellCommand);
@@ -1159,12 +1170,16 @@ public class ApplicationMaster {
         public void onGetContainerStatusError(
                 ContainerId containerId, Throwable t) {
             LOG.error("Failed to query the status of Container " + containerId);
+            applicationMaster.numCompletedContainers.incrementAndGet();
+            applicationMaster.numFailedContainers.incrementAndGet();
         }
 
         @Override
         public void onStopContainerError(ContainerId containerId, Throwable t) {
             LOG.error("Failed to stop Container " + containerId);
             containers.remove(containerId);
+            applicationMaster.numCompletedContainers.incrementAndGet();
+            applicationMaster.numFailedContainers.incrementAndGet();
         }
     }
 

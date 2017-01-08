@@ -93,6 +93,9 @@ public class ResultStat {
         List<Double> avgRuntimeList = sortKey(avgRuntime);
         List<Double> totalWaittimeList = sortKey(totalWaittime);
         System.out.println("top " + num + " of total runtime:");
+        if (num > totalRuntimeList.size()){
+            num = totalRuntimeList.size();
+        }
         for(int i = 0; i < num; i++) {
             Double t = totalRuntimeList.get(i);
             System.out.println((i + 1) + "\t" + totalRuntime.get(t)
