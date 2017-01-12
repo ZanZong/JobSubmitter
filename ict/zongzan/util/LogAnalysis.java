@@ -65,7 +65,13 @@ public class LogAnalysis {
             long waittime = Long.parseLong(taskWait.get(key));
             totalWaittime += starttime - waittime;
         }
-        avgTime = (double)totalRuntime / (double)keySet.size();
+        long pureRuntime = 0;
+        for(String key : keySet) {
+            long starttime = Long.parseLong(startInfo.get(key).split("\t")[2]);
+            long endtime = Long.parseLong(endInfo.get(key));
+            pureRuntime += endtime - starttime;
+        }
+        avgTime = (totalRuntime + pureRuntime) / (double)keySet.size();
         avgTime /= 1000.0;
         totalWaittime /= 1000.0;
         System.out.println("Job total runtime " + totalRuntime / 1000.0 + "s" +
@@ -126,7 +132,6 @@ public class LogAnalysis {
             taskWait.put(taskTag, timestamp);
         }
 
-
         //解析信息
         for(String s : startList){
             String taskTag = "";
@@ -148,7 +153,6 @@ public class LogAnalysis {
                 }
             }
             startInfo.put(taskTag, containerId + "\t" + priority  + "\t"+ timestamp);
-
         }
 
         for(String s : endList) {
@@ -188,7 +192,6 @@ public class LogAnalysis {
 
             }
         });
-
         int count = 0;
         for(String key : sortList) {
             System.out.println(count++ + "\t" + key + "-->" + startInfo.get(key) + "\t" +
@@ -206,7 +209,7 @@ public class LogAnalysis {
         return time;
     }
     public long getMintime(Map<String, String> map) {
-        Long time = new Long("1903593275134");
+        Long time = new Long("2903593275134");
         for(String s : map.keySet()){
             long t = Long.parseLong(map.get(s).split("\t")[2]);
             if(t < time)

@@ -590,7 +590,8 @@ public class ApplicationMaster {
                 else {
                     LOG.info("Max setnum is:" + maxSet);
                     // task队列没有作业，说明没有作业滞留，不需要申请container
-                    if(totalSubmittedTaskNum - (taskQueuePool.get(maxSet).size() + numCompletedContainers.get()) < 2){
+                    if(numAllocatedContainers.get() != 0 &&
+                            numAllocatedContainers.get() == numCompletedContainers.get()){
                         ContainerRequest containerAsk = setupContainerAskForRM(taskQueuePool.get(maxSet).peek());
                         amRMClient.addContainerRequest(containerAsk);
                         LOG.info("Request container again for remain tasks.");
@@ -788,7 +789,6 @@ public class ApplicationMaster {
                             + ", containerToken="
                             + allocatedContainer.getContainerToken().getIdentifier().toString()
                     + ", contaierPriority=" + allocatedContainer.getPriority().toString());
-                    numAllocatedContainers.addAndGet(1);
                     // 从队列里取一个task,并从中删除
                     Task t = null;
                     synchronized (taskQueuePool) {
@@ -803,6 +803,7 @@ public class ApplicationMaster {
                     amRMClient.releaseAssignedContainer(allocatedContainer.getId());
                     return;
                 }
+                numAllocatedContainers.addAndGet(1);
                 LaunchContainerRunnable runnableLaunchContainer =
                         new LaunchContainerRunnable(allocatedContainer, containerListener, t);
                 Thread launchThread = new Thread(runnableLaunchContainer);
