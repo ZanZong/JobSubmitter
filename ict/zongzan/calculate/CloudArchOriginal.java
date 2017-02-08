@@ -10,6 +10,6 @@ public class CloudArchOriginal {
 
     public static long getloops(double csps, int cores) {
         double dura = csps / (double) cores;
-        return (long)(dura * 440);
+        return (long)(dura * 150);
     }
 }

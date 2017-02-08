@@ -454,8 +454,13 @@ public class Client {
 
         LOG.info("Copy App Master jar from local filesystem and add to local environment");
         //加载本地资源,存到了hdfs里
-
-        FileSystem fs = FileSystem.get(conf);
+        FileSystem fs = null;
+        try{
+            fs = FileSystem.get(conf);
+        }catch (Exception e){
+            // here will throw Amazon S3 warn, don't know why
+            e.printStackTrace();
+        }
         addToLocalResources(fs, appMasterJar, appMasterJarPath, appId.toString(),
                 localResources, null);
         //改为不上传脚本，传jar包，使用命令直接运行

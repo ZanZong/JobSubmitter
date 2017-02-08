@@ -253,6 +253,7 @@ public class ApplicationMaster {
             if (!doRun) {
                 System.exit(0);
             }
+            // 正常使用run(),当cuttime时使用runfast()
             appMaster.run();
             result = appMaster.finish();
         } catch (Throwable t) {
@@ -434,6 +435,10 @@ public class ApplicationMaster {
         new HelpFormatter().printHelp("ApplicationMaster", opts);
     }
 
+    public void runFast() throws YarnException, IOException, InterruptedException {
+        LOG.info("Start Application in fast mode");
+
+    }
     /**
      * Main run function for the application master
      *
@@ -471,7 +476,7 @@ public class ApplicationMaster {
 
         //创建AMRMClientAsync对象，负责与RM交互，第一个参数是时间间隔,time/ms,心跳包间隔
         AMRMClientAsync.CallbackHandler allocListener = new RMCallbackHandler();
-        amRMClient = AMRMClientAsync.createAMRMClientAsync(1000, allocListener);//将回调方法告诉了RM
+        amRMClient = AMRMClientAsync.createAMRMClientAsync(500, allocListener);//将回调方法告诉了RM
         amRMClient.init(conf);
         amRMClient.start();
 
@@ -1063,8 +1068,8 @@ public class ApplicationMaster {
                 long loops = CloudArchOriginal.getloops(time, task.getResourceRequests().getCores());
                 time *= 1000;//参数的单位是ms
                 shellCommand = "./memorycore " + task.getResourceRequests().getRAM() + " " + (long)time + " &";
-                /*shellArgs = "time for((a=0;a<" + loops + ";a++));do ./" +
-                        TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";*/
+                shellArgs = "for((a=0;a<" + loops + ";a++));do ./" +
+                        TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";
             }
             //shellCommand = linux_bash_command;
             //vargs.add(shellCommand);
