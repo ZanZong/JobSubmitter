@@ -47,7 +47,6 @@ import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.collections.map.HashedMap;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -236,11 +235,6 @@ public class ApplicationMaster {
     @VisibleForTesting
     TimelineClient timelineClient;
 
-    // 运行的命令，如果是脚本，则为"bash"
-    // 命令跟目录在/bin，会补全为/bin/bash
-    // 这里直接运行java -jar，故为java
-    private final String linux_bash_command = "bash";
-
     /**
      * @param args Command line args
      */
@@ -379,11 +373,13 @@ public class ApplicationMaster {
             }
         }
         // get memorycore, have some error with Gson,so use more bad method bellow
-        String memInfo = envs.get(DSConstants.MEMCONSUME);
-        memConsume.setTaskJarLocation(memInfo.split(";")[0]);
-        memConsume.setTaskJarLen(Long.parseLong(memInfo.split(";")[1]));
-        memConsume.setTaskJarTimestamp(Long.parseLong(memInfo.split(";")[2]));
+        if(taskType.equals("assembly")) {
+            String memInfo = envs.get(DSConstants.MEMCONSUME);
+            memConsume.setTaskJarLocation(memInfo.split(";")[0]);
+            memConsume.setTaskJarLen(Long.parseLong(memInfo.split(";")[1]));
+            memConsume.setTaskJarTimestamp(Long.parseLong(memInfo.split(";")[2]));
 
+        }
         String jobids = envs.get(DSConstants.JOBIDSTRING);
         //根据id得到Json字符串，解析得到Task对象
         //Gson gson = new Gson();
@@ -887,7 +883,7 @@ public class ApplicationMaster {
             // 等待starttime时间后，作业开始
             try {
                 //cuttime不准确
-                if(cutTime == -1) {
+                if(cutTime == 1) {
                     // do nothing
                 }
                 else {
@@ -996,7 +992,6 @@ public class ApplicationMaster {
 
             // Set the local resources
             Map<String, LocalResource> localResources = new HashMap<String, LocalResource>();
-
             /*URL taskUrl = null;
             try{
             taskUrl = ConverterUtils.getYarnUrlFromURI(
@@ -1013,12 +1008,12 @@ public class ApplicationMaster {
                   taskJarLen, taskJarTimestamp);
             localResources.put("YarnApp.jar", taskJarRsrc);*/
             URL taskUrl = null;
-            URL memUrl = null;
             try {
                 taskUrl = ConverterUtils.getYarnUrlFromURI(
                         new URI(task.getTaskJarLocation()));
-                memUrl = ConverterUtils.getYarnUrlFromURI(
-                        new URI(memConsume.getTaskJarLocation()));
+                if(taskType.equals("assembly")){
+
+                }
             } catch (URISyntaxException e) {
                 LOG.error("Error when trying to use task jar path specified"
                         + " in env, path=" + task.getJarPath(), e);
@@ -1029,11 +1024,28 @@ public class ApplicationMaster {
             LocalResource taskJarRsrc = LocalResource.newInstance(taskUrl,
                     LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
                     task.getTaskJarLen(), task.getTaskJarTimestamp());
-            LocalResource memJarRsrc = LocalResource.newInstance(memUrl,
-                    LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
-                    memConsume.getTaskJarLen(), memConsume.getTaskJarTimestamp());
+
             localResources.put(TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()), taskJarRsrc);
-            localResources.put(TaskTransUtil.getFileNameByPath(memConsume.getTaskJarLocation()), memJarRsrc);
+
+            // CloudArch需要的程序
+            if(taskType.equals("assembly")) {
+                URL memUrl = null;
+                try {
+                    memUrl = ConverterUtils.getYarnUrlFromURI(
+                            new URI(memConsume.getTaskJarLocation()));
+                } catch (URISyntaxException e) {
+                    LOG.error("Error when trying to use task jar path specified"
+                            + " in env, path=" + task.getJarPath(), e);
+                    numCompletedContainers.incrementAndGet();
+                    numFailedContainers.incrementAndGet();
+                    return;
+                }
+                LocalResource memJarRsrc = LocalResource.newInstance(memUrl,
+                        LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
+                        memConsume.getTaskJarLen(), memConsume.getTaskJarTimestamp());
+                localResources.put(TaskTransUtil.getFileNameByPath(memConsume.getTaskJarLocation()), memJarRsrc);
+            }
+
             // Set the necessary command to execute on the allocated container
             Vector<CharSequence> vargs = new Vector<CharSequence>(5);
 
@@ -1049,7 +1061,8 @@ public class ApplicationMaster {
             }
             else if (taskType.equals("shellscript")){
                 shellCommand = "bash";
-                // unfinished
+                shellArgs = "./" + TaskTransUtil.getFileNameByPath(task.getTaskJarLocation());
+
             }
             else if (taskType.equals("c-program")){
                 shellCommand = "./" + TaskTransUtil.getFileNameByPath(task.getTaskJarLocation());
@@ -1059,7 +1072,7 @@ public class ApplicationMaster {
             else if (taskType.equals("assembly")) {
 
                 double time = (double)task.getResourceRequests().getScps() / task.getResourceRequests().getCores();
-                if(cutTime == -1) {
+                if(cutTime == 1) {
                     // do nothing,-1 is original
                 }
                 else {
@@ -1071,17 +1084,18 @@ public class ApplicationMaster {
                 shellArgs = "for((a=0;a<" + loops + ";a++));do ./" +
                         TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";
             }
+            else{
+                //pass
+            }
             //shellCommand = linux_bash_command;
             //vargs.add(shellCommand);
             // Set args for the shell command
             //vargs.add(shellArgs);
             vargs.add(shellCommand);
             vargs.add(shellArgs);
-
             //Container日志路径，包含Container的输出和错误日志，位于/hadoop/userlogs/
             vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout");
             vargs.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr");
-
             // Get final commmand
             StringBuilder command = new StringBuilder();
             for (CharSequence str : vargs) {
