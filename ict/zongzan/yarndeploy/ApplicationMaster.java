@@ -833,6 +833,7 @@ public class ApplicationMaster {
 
         @Override
         public void onNodesUpdated(List<NodeReport> updatedNodes) {
+
         }
 
         @Override
@@ -1073,7 +1074,7 @@ public class ApplicationMaster {
 
                 double time = (double)task.getResourceRequests().getScps() / task.getResourceRequests().getCores();
                 if(cutTime == 1) {
-                    // do nothing,-1 is original
+                    // do nothing, 1 is original
                 }
                 else {
                     time /= (double)cutTime;
