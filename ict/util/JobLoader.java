@@ -1,4 +1,4 @@
-package ict.zongzan.util;
+package ict.util;
 
 
 import java.io.FileInputStream;
@@ -11,9 +11,9 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
-import ict.zongzan.scheduler.Job;
-import ict.zongzan.scheduler.Resource;
-import ict.zongzan.scheduler.Task;
+import ict.scheduler.Job;
+import ict.scheduler.Resource;
+import ict.scheduler.Task;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.w3c.dom.Document;

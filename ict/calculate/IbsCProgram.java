@@ -1,4 +1,4 @@
-package ict.zongzan.calculate;
+package ict.calculate;
 
 /**
  * 该类用来计算在使用c程序作为task时，

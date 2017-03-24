@@ -1,4 +1,4 @@
-package ict.zongzan.calculate;
+package ict.calculate;
 
 /**
  * 该类是CloudArch中Original部分生成的汇编文件产生的

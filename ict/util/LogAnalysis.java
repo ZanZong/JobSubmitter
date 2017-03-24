@@ -1,4 +1,4 @@
-package ict.zongzan.util;
+package ict.util;
 
 import java.io.*;
 import java.util.*;

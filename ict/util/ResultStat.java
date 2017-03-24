@@ -1,6 +1,4 @@
-package ict.zongzan.util;
-
-import org.apache.avro.generic.GenericData;
+package ict.util;
 
 import java.io.BufferedReader;
 import java.io.FileReader;

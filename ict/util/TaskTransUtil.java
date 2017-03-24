@@ -1,12 +1,12 @@
-package ict.zongzan.util;
+package ict.util;
 
 
 import com.google.gson.*;
 import com.google.gson.reflect.TypeToken;
-import ict.zongzan.scheduler.Job;
-import ict.zongzan.scheduler.Resource;
-import ict.zongzan.scheduler.Task;
-import ict.zongzan.yarndeploy.DSConstants;
+import ict.scheduler.Resource;
+import ict.scheduler.Task;
+import ict.scheduler.Job;
+import ict.yarndeploy.DSConstants;
 
 import java.lang.reflect.Type;
 import java.util.*;

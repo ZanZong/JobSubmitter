@@ -1,4 +1,4 @@
-package ict.zongzan.yarndeploy;
+package ict.yarndeploy;
 /**
  * Created by Zongzan on 2016/11/4.
  */
@@ -7,10 +7,10 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import com.google.gson.Gson;
-import ict.zongzan.scheduler.Job;
-import ict.zongzan.scheduler.Task;
-import ict.zongzan.util.JobLoader;
-import ict.zongzan.util.TaskTransUtil;
+import ict.scheduler.Job;
+import ict.scheduler.Task;
+import ict.util.JobLoader;
+import ict.util.TaskTransUtil;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.GnuParser;
@@ -525,7 +525,7 @@ public class Client {
                 e.printStackTrace();
                 LOG.info("Get memorycore file path error, don't have correct jobs loaded.");
             }
-            ict.zongzan.scheduler.Resource memres = new ict.zongzan.scheduler.Resource(1,1);
+            ict.scheduler.Resource memres = new ict.scheduler.Resource(1,1);
             memConsume.setTaskId("-1");
             memConsume.setResourceRequests(memres);
             memConsume.setJarPath(TaskTransUtil.getFilePath(memFilePath) + "memorycore");

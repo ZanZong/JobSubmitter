@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package ict.zongzan.yarndeploy;
+package ict.yarndeploy;
 /**
  * Created by Zongzan on 2016/11/4.
  */
@@ -35,19 +35,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import ict.zongzan.calculate.CloudArchOriginal;
-import ict.zongzan.calculate.IbsCProgram;
-import ict.zongzan.scheduler.Job;
-import ict.zongzan.scheduler.Schedule;
-import ict.zongzan.scheduler.Task;
-import ict.zongzan.scheduler.TaskSet;
-import ict.zongzan.util.TaskTransUtil;
+import ict.calculate.CloudArchOriginal;
+import ict.calculate.IbsCProgram;
+import ict.scheduler.Job;
+import ict.scheduler.Schedule;
+import ict.scheduler.Task;
+import ict.util.TaskTransUtil;
+import ict.scheduler.TaskSet;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.collections.map.HashedMap;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -72,7 +71,6 @@ import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Container;
-import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.ContainerState;
@@ -97,11 +95,9 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.util.ConverterUtils;
-import org.apache.hadoop.yarn.util.SystemClock;
 import org.apache.log4j.LogManager;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.log4j.helpers.LogLog;
 
 
 @InterfaceAudience.Public

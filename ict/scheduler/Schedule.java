@@ -1,10 +1,8 @@
-package ict.zongzan.scheduler;
+package ict.scheduler;
 
-import ict.zongzan.util.TaskTransUtil;
+import ict.util.TaskTransUtil;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.util.hash.Hash;
-import org.apache.hadoop.yarn.api.records.Container;
 
 import java.util.*;
 

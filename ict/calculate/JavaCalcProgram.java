@@ -1,4 +1,4 @@
-package ict.zongzan.calculate;
+package ict.calculate;
 
 /**
  * java程序对cpu资源的使用

@@ -1,4 +1,4 @@
-package ict.zongzan.calculate;
+package ict.calculate;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;

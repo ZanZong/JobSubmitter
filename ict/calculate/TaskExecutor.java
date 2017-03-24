@@ -1,4 +1,4 @@
-package ict.zongzan.calculate;
+package ict.calculate;
 
 /**
  * TaskExecutor是一个抽象类，它包含提交的作业中，

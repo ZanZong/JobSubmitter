@@ -1,4 +1,4 @@
-package ict.zongzan.scheduler;
+package ict.scheduler;
 
 import java.util.List;
 

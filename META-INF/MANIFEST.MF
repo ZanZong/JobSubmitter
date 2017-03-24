@@ -1,3 +1,3 @@
 Manifest-Version: 1.0
-Main-Class: ict.zongzan.master.Master
+Main-Class: ict.master.Master
 

@@ -1,20 +1,8 @@
-package ict.zongzan.master;
+package ict.master;
 
-import ict.zongzan.scheduler.Job;
-import ict.zongzan.scheduler.Resource;
-import ict.zongzan.scheduler.Task;
-import ict.zongzan.util.JobLoader;
-import ict.zongzan.util.TaskTransUtil;
-import ict.zongzan.yarndeploy.Client;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.GnuParser;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
+import ict.yarndeploy.Client;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Start YarnClient by this class

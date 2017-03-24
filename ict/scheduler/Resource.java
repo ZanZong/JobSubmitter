@@ -1,4 +1,4 @@
-package ict.zongzan.scheduler;
+package ict.scheduler;
 
 /**
  * Created by Zongzan on 2016/11/9.

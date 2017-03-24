@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package ict.zongzan.yarndeploy;
+package ict.yarndeploy;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
