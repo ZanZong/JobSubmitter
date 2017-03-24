@@ -88,7 +88,6 @@ import org.apache.hadoop.yarn.api.records.URL;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEvent;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
-import org.apache.hadoop.yarn.applications.distributedshell.Log4jPropertyHelper;
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest;
 import org.apache.hadoop.yarn.client.api.TimelineClient;
 import org.apache.hadoop.yarn.client.api.async.AMRMClientAsync;
@@ -682,6 +681,8 @@ public class ApplicationMaster {
         return success;
     }
 
+    
+
     //container中的处理都是在这里编写的，由RM回调
     private class RMCallbackHandler implements AMRMClientAsync.CallbackHandler {
 
@@ -746,8 +747,6 @@ public class ApplicationMaster {
 
                /* // increment counters for completed/failed containers
                 int exitStatus = containerStatus.getExitStatus();
-                // 执行c的时候有问题，会有exitstatus = 16，但执行结果是正确的
-                // 先做一下处理，让application正常结束
                 if (0 != exitStatus) {
                     // container failed
                     if (ContainerExitStatus.ABORTED != exitStatus) {
@@ -758,7 +757,6 @@ public class ApplicationMaster {
                         // container被kill，RM会把资源释放掉
                         numAllocatedContainers.decrementAndGet();
                         numRequestedContainers.decrementAndGet();
-
                     }
                 } else {*/
                     // container completed successfully
@@ -1068,8 +1066,8 @@ public class ApplicationMaster {
                 long loops = CloudArchOriginal.getloops(time, task.getResourceRequests().getCores());
                 time *= 1000;//参数的单位是ms
                 shellCommand = "./memorycore " + task.getResourceRequests().getRAM() + " " + (long)time + " &";
-                shellArgs = "for((a=0;a<" + loops + ";a++));do ./" +
-                        TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";
+                //shellArgs = "for((a=0;a<" + loops + ";a++));do ./" +
+                //       TaskTransUtil.getFileNameByPath(task.getTaskJarLocation()) + "; done;";
             }
             //shellCommand = linux_bash_command;
             //vargs.add(shellCommand);
