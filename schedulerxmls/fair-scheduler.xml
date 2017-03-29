@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<allocations>
+		<queue name="queueA">
+			<weight>3</weight>
+		</queue>
+		<queuePlacementPolicy>
+			<rule name="specified" create="false"/>
+			<rule name="primaryGroup" create="false"/>
+			<rule name="default" queue="queueA"/>
+		</queuePlacementPolicy>
+</allocations>

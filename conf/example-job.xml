@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	This is a example of workloads configuration.
+	Label <jobs> can contain manay jobs, and label
+	<tasks> can contiaine manay tasks.
+	
+	jobId: 			String. Each job has a unique id.
+	
+	jobName:		Without effect in current version.
+	description:    Without effect in current version.
+	
+	starttime: 		Integer. After sleep this duration time count 
+					in second, the job is submitted. And the 
+					resources remaining indeed determine the job 
+					can run or not.
+	
+	priority:		Integer. Job priority.
+	
+	taskId:			String. Each task has a unique id in a job.
+	
+	execSequence:	Integer. It means the sequence of tasks. Tasks 
+					which has same sequence will be executed at the
+					same time if the resources enough. And in this 
+					example, task "0003" will be executed when task 
+					"0001" and "0002" are done, and you can control 
+					tasks running as DAG in the same way.         
+	jarPath:		Each task need a executable to run. You can set 
+					all tasks use the same executable or different.
+					If you want to change the executable's type, you 
+					need to modify the parameter "-task_type" in 
+					`./sh/runexampletask.sh`
+	
+	resourceAlloc:  Integer. The size of YARN container with vcores
+					and memory(MB).
+
+	resourceConsume:Double. `csps` is abbreviation for "core second 
+					per second", means how long the task running.       -->
+<jobs>
+	<job>
+		<jobId>1001</jobId>
+		<jobName>testjob</jobName>
+		<description>Aonther job.</description>
+		<starttime>0</starttime>
+		<priority>9</priority>
+		<tasks>
+			<task>
+				<taskId>0001</taskId>
+				<execSequence>0</execSequence>
+				<jarPath>/usr/local/Jobsubmitter/tasks/cmd.sh</jarPath>
+				<resourceAlloc>
+					<cores>1</cores>
+					<ram>1024</ram>
+				</resourceAlloc>
+				<resourceConsume>
+					<csps>50</csps>
+				</resourceConsume>
+			</task>
+			<task>
+				<taskId>0002</taskId>
+				<execSequence>0</execSequence>
+				<jarPath>/usr/local/Jobsubmitter/tasks/cmd.sh</jarPath>
+				<resourceAlloc>
+					<cores>1</cores>
+					<ram>1024</ram>
+				</resourceAlloc>
+				<resourceConsume>
+					<csps>50</csps>
+				</resourceConsume>
+			</task>
+			<task>
+				<taskId>0003</taskId>
+				<execSequence>1</execSequence>
+				<jarPath>/usr/local/Jobsubmitter/tasks/cmd.sh</jarPath>
+				<resourceAlloc>
+					<cores>1</cores>
+					<ram>1024</ram>
+				</resourceAlloc>
+				<resourceConsume>
+					<csps>50</csps>
+				</resourceConsume>
+			</task>
+		</tasks>
+	</job>
+</jobs>
